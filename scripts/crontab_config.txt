@@ -1,0 +1,26 @@
+# Crontab configuration for running the finance workflow at 10am, 2pm, and 6pm daily
+# To install: crontab crontab_config.txt
+
+# Format: minute hour day_of_month month day_of_week command
+# * * * * * command to execute
+# │ │ │ │ │
+# │ │ │ │ └─── day of week (0 - 6) (Sunday = 0)
+# │ │ │ └───── month (1 - 12)
+# │ │ └─────── day of month (1 - 31)
+# │ └───────── hour (0 - 23)
+# └─────────── minute (0 - 59)
+
+# Environment variables
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+# Update this to your project directory
+WORKFLOW_DIR=/path/to/JotexTest_finance_auto_watch
+
+# Run at 10:00 AM daily
+0 10 * * * cd $WORKFLOW_DIR && ./run_workflow.sh >> $WORKFLOW_DIR/logs/cron_output.log 2>&1
+
+# Run at 2:00 PM daily
+0 14 * * * cd $WORKFLOW_DIR && ./run_workflow.sh >> $WORKFLOW_DIR/logs/cron_output.log 2>&1
+
+# Run at 6:00 PM daily
+0 18 * * * cd $WORKFLOW_DIR && ./run_workflow.sh >> $WORKFLOW_DIR/logs/cron_output.log 2>&1

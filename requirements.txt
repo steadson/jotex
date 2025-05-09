@@ -1,0 +1,8 @@
+pandas
+msal
+requests
+python-dotenv
+openpyxl
+scikit-learn
+fuzzywuzzy
+python-Levenshtein

@@ -1,0 +1,66 @@
+# Environment variables and secrets
+.env
+
+# Python virtual environments
+venv
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Build and distribution
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Project-specific directories
+RESULTS/
+test_requests
+logs/
+INPUT/
+data/cache/
+data/downloads/
+data/output/
+
+# Data files
+*.xlsx
+*.csv
+*.pkl
+*.json
+
+# Specific files to ignore
+read_files_setup.py
+read_files_sharepoint.py
+delete_customer_payment_testenv.py
+ms_token.json
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
