@@ -1,11 +1,9 @@
 import pandas as pd
 import re
-import openpyxl
-from openpyxl.utils import get_column_letter
 import os
 from pathlib import Path
 import warnings
-warnings.filterwarnings('ignore', category=UserWarning, module='openpyxl')
+warnings.filterwarnings('ignore')
 
 def find_transaction_description_column(df):
     """Find the column containing descriptions.
@@ -256,126 +254,13 @@ def extract_transaction_info(txn_desc):
     
     return customer_name, description
 
-def save_with_formulas(input_file, df, output_file):
-    """Save DataFrame to Excel while preserving formulas in the original file."""
-    try:
-        # Load original workbook with formulas
-        wb = openpyxl.load_workbook(input_file, data_only=False, keep_links=False)
-        ws = wb.active
-        
-        # First determine if CUSTOMER_NAME and DESCRIPTION columns already exist
-        header_row = ws[1]  # First row is the header
-        header_values = {cell.value: cell.column for cell in header_row if cell.value}
-        
-        # Check if columns exist
-        customer_col = None
-        desc_col = None
-        
-        for col_name, col_idx in header_values.items():
-            if col_name == "CUSTOMER_NAME":
-                customer_col = col_idx
-            elif col_name == "DESCRIPTION":
-                desc_col = col_idx
-        
-        # If columns don't exist yet, create them right after the Transaction Description column
-        if not customer_col:
-            customer_col = ws.max_column + 1
-            ws.cell(row=1, column=customer_col).value = "CUSTOMER_NAME"
-            
-            if not desc_col:
-                desc_col = ws.max_column + 1
-                ws.cell(row=1, column=desc_col).value = "DESCRIPTION"
-        
-        # If only DESCRIPTION column is missing, add it after CUSTOMER_NAME
-        elif not desc_col:
-            next_col = customer_col + 1
-            ws.insert_cols(next_col)
-            ws.cell(row=1, column=next_col).value = "DESCRIPTION"
-            desc_col = next_col
-        
-        # Create a mapping of row indices between DataFrame and Excel
-        # Excel rows start at 1, with row 1 being the header
-        df_to_excel_row_map = {}
-        
-        # If there's a transaction date column in both Excel and DataFrame, use it to map rows
-        date_col_excel = None
-        date_col_df = None
-        
-        # Look for date column in Excel
-        for col_name, col_idx in header_values.items():
-            if "Date" in str(col_name):
-                date_col_excel = col_idx
-                break
-        
-        # Look for date column in DataFrame
-        for col in df.columns:
-            if "Date" in str(col):
-                date_col_df = col
-                break
-        
-        # If we found date columns in both, use them to map rows
-        if date_col_excel and date_col_df:
-            print(f"Using date column for row mapping: {date_col_df}")
-            
-            # Create a dictionary of date values to row indices in Excel
-            excel_dates = {}
-            for row_idx in range(2, ws.max_row + 1):  # Start from row 2 (skip header)
-                cell_value = ws.cell(row=row_idx, column=date_col_excel).value
-                if cell_value:
-                    # Handle potential datetime objects
-                    if hasattr(cell_value, 'strftime'):
-                        cell_value = cell_value.strftime('%Y-%m-%d %H:%M:%S')
-                    excel_dates[str(cell_value)] = row_idx
-            
-            # Map DataFrame rows to Excel rows using dates
-            for df_idx, row in df.iterrows():
-                date_value = row[date_col_df]
-                if date_value is not None:
-                    # Handle potential datetime objects
-                    if hasattr(date_value, 'strftime'):
-                        date_value = date_value.strftime('%Y-%m-%d %H:%M:%S')
-                    
-                    # Look up the Excel row for this date
-                    if str(date_value) in excel_dates:
-                        df_to_excel_row_map[df_idx] = excel_dates[str(date_value)]
-        
-        # If no date mapping was possible, use simple row-to-row mapping
-        if not df_to_excel_row_map:
-            print("Using simple row-to-row mapping")
-            # Just map DataFrame rows directly to Excel rows (2+)
-            for df_idx in range(len(df)):
-                df_to_excel_row_map[df_idx] = df_idx + 2  # +2 because Excel rows start at 1 and row 1 is header
-        
-        # Now update the data for each row using the mapping
-        for df_idx, row in df.iterrows():
-            if df_idx in df_to_excel_row_map:
-                excel_row = df_to_excel_row_map[df_idx]
-                
-                if pd.notna(row["CUSTOMER_NAME"]) and row["CUSTOMER_NAME"]:
-                    ws.cell(row=excel_row, column=customer_col).value = row["CUSTOMER_NAME"]
-                
-                if pd.notna(row["DESCRIPTION"]) and row["DESCRIPTION"]:
-                    ws.cell(row=excel_row, column=desc_col).value = row["DESCRIPTION"]
-        
-        # Save workbook
-        wb.save(output_file)
-        print(f"Saved to {output_file} with formulas preserved")
-        print(f"CUSTOMER_NAME is in column {get_column_letter(customer_col)}")
-        print(f"DESCRIPTION is in column {get_column_letter(desc_col)}")
-        return True
-    except Exception as e:
-        print(f"Error saving Excel file: {e}")
-        import traceback
-        traceback.print_exc()
-        return False
-
 def process_transactions(input_file, output_file):
     """
-    Main function to process bank transactions and extract customer names and descriptions.
+    Main function to process bank transactions from CSV and extract customer names and descriptions.
     
     Parameters:
-    input_file (str): Path to the input Excel file
-    output_file (str): Path to save the output Excel file
+    input_file (str): Path to the input CSV file
+    output_file (str): Path to save the output CSV file
     
     Returns:
     bool: True if processing was successful, False otherwise
@@ -383,82 +268,66 @@ def process_transactions(input_file, output_file):
     try:
         print(f"Processing file: {input_file}")
         
-        # Load the workbook directly for processing
-        wb = openpyxl.load_workbook(input_file, data_only=False, keep_links=False)
-        ws = wb.active
+        # Try to detect encoding - sometimes bank CSV files use different encodings
+        encodings = ['utf-8', 'latin1', 'iso-8859-1']
+        df = None
         
-        # Find description column in Excel
-        txn_desc_col = None
-        header_row = ws[1]  # First row is the header
-        
-        for cell in header_row:
-            if cell.value == "Description":
-                txn_desc_col = cell.column
+        for encoding in encodings:
+            try:
+                df = pd.read_csv(input_file, encoding=encoding)
+                print(f"Successfully read file with {encoding} encoding")
                 break
+            except UnicodeDecodeError:
+                continue
         
+        if df is None:
+            print("Error: Could not read CSV file with any common encoding")
+            return False
+        
+        # Find transaction description column
+        txn_desc_col = find_transaction_description_column(df)
         if not txn_desc_col:
             print("Error: Could not find Description column")
             return False
         
-        print(f"Found Description column at position {get_column_letter(txn_desc_col)}")
+        print(f"Found Description column: {txn_desc_col}")
         
-        # Find or create CUSTOMER_NAME and DESCRIPTION columns
-        customer_col = None
-        desc_col = None
+        # Ensure CUSTOMER_NAME and DESCRIPTION columns exist
+        if "CUSTOMER_NAME" not in df.columns:
+            df["CUSTOMER_NAME"] = ""
         
-        for cell in header_row:
-            if cell.value == "CUSTOMER_NAME":
-                customer_col = cell.column
-            elif cell.value == "DESCRIPTION":
-                desc_col = cell.column
+        if "DESCRIPTION" not in df.columns:
+            df["DESCRIPTION"] = ""
         
-        # Create columns if they don't exist
-        if not customer_col:
-            # Add column at the end
-            next_col = ws.max_column + 1
-            ws.cell(row=1, column=next_col).value = "CUSTOMER_NAME"
-            customer_col = next_col
-            print(f"Created CUSTOMER_NAME column at position {get_column_letter(customer_col)}")
-        
-        if not desc_col:
-            # Insert column after CUSTOMER_NAME
-            next_col = customer_col + 1
-            ws.insert_cols(next_col)
-            ws.cell(row=1, column=next_col).value = "DESCRIPTION"
-            desc_col = next_col
-            print(f"Created DESCRIPTION column at position {get_column_letter(desc_col)}")
-        
-        # Process each row directly in Excel
+        # Process each row
         customer_count = 0
         desc_count = 0
         total_rows = 0
         
-        # Start from row 2 (skip header)
-        for row_idx in range(2, ws.max_row + 1):
-            # Get transaction description
-            txn_desc = ws.cell(row=row_idx, column=txn_desc_col).value
+        for index, row in df.iterrows():
+            txn_desc = row[txn_desc_col]
             
-            if txn_desc:
+            if txn_desc and not pd.isna(txn_desc):
                 total_rows += 1
                 # Extract customer name and description
                 customer_name, description = extract_transaction_info(txn_desc)
                 
-                # Update cells
+                # Update DataFrame cells
                 if customer_name:
-                    ws.cell(row=row_idx, column=customer_col).value = customer_name
+                    df.at[index, "CUSTOMER_NAME"] = customer_name
                     customer_count += 1
                 
                 if description:
-                    ws.cell(row=row_idx, column=desc_col).value = description
+                    df.at[index, "DESCRIPTION"] = description
                     desc_count += 1
         
-        # Save the workbook
-        wb.save(output_file)
+        # Save the DataFrame to CSV
+        df.to_csv(output_file, index=False)
         
         print(f"Processed {total_rows} transactions")
         print(f"Extracted {customer_count} customer names")
         print(f"Extracted {desc_count} descriptions")
-        print(f"Saved to {output_file} with formulas preserved")
+        print(f"Saved to {output_file}")
         
         return True
     
@@ -472,6 +341,9 @@ def process_transactions(input_file, output_file):
 if __name__ == "__main__":
     input_file = Path('data/downloads') / 'new_rows_JOTEX PTE LTD MAYBANK SG 2025.csv'
     output_file = Path('data/temp') / 'SG_MBB_2025_processed.csv'
+    
+    # Create output directory if it doesn't exist
+    os.makedirs(Path('data/temp'), exist_ok=True)
     
     success = process_transactions(input_file, output_file)
     
