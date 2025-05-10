@@ -559,9 +559,9 @@ def main():
     """
     Main function to run the PBB transaction parser.
     """
-    input_folder = 'downloads'
+    input_folder = 'data/downloads'
     file_path = Path(input_folder) / 'new_rows_PBB 2025.csv'
-    output_folder = 'TEMP'
+    output_folder = 'data/temp'
     os.makedirs(output_folder, exist_ok=True)
     output_file_path = Path(output_folder) / 'PBB_2025_processed.csv'
     
