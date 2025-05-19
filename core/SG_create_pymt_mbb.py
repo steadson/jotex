@@ -124,7 +124,7 @@ class FinanceWorkflow:
             else:
                 self.logger.warning(f"Credit column not found in CSV. Available columns: {df.columns.tolist()}")
             
-            df['FormattedDate'] = df['Posting date'].apply(self.convert_date)
+            df['FormattedDate'] = df['Transaction Date'].apply(self.convert_date)
             self.logger.info(f"Successfully read CSV with {len(df)} rows and {len(df.columns)} columns")
             return df
             
@@ -198,7 +198,7 @@ class FinanceWorkflow:
                 # Log sample data for debugging
                 if len(df) > 0 and 'Credit' in df.columns:
                     self.logger.info(f"Sample Credit values after manual parsing: {df['Credit'].head(5).tolist()}")
-                df['FormattedDate'] = df['Posting date'].apply(self.convert_date)
+                df['FormattedDate'] = df['Transaction Date'].apply(self.convert_date)
                 
                 self.logger.warning(f"Used manual CSV parsing, processed {len(df)} rows with {len(df.columns)} columns")
                 return df
@@ -269,16 +269,16 @@ class FinanceWorkflow:
             # Try to format the date here as a fallback
             try:
                 from dateutil import parser
-                date_str = str(row.get('Posting date', ''))
+                date_str = str(row.get('Transaction Date', ''))
                 if date_str:
                     formatted_date = parser.parse(date_str).strftime('%Y-%m-%d')
                     row['FormattedDate'] = formatted_date
                 else:
-                    self.logger.warning("Missing posting date, skipping row")
+                    self.logger.warning("Missing Transaction Date, skipping row")
                     self.stats['failed'] += 1
                     return None
             except Exception as e:
-                self.logger.warning(f"Invalid date format: {row.get('Posting date', 'N/A')}, error: {e}")
+                self.logger.warning(f"Invalid date format: {row.get('Transaction Date', 'N/A')}, error: {e}")
                 self.stats['failed'] += 1
                 return None
 
@@ -295,7 +295,6 @@ class FinanceWorkflow:
 
         payload = {
             "journalId": self.journal_id,
-            "journalDisplayName": "CRJ",
             "customerId": customer_info['customerId'],
             "customerNumber": customer_info['customerNumber'],
             "postingDate": row['FormattedDate'],
