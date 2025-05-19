@@ -14,6 +14,7 @@ load_dotenv()
 CLIENT_ID = os.getenv('STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_ID')
 CLIENT_SECRET = os.getenv('STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_SECRET')
 TENANT_ID = os.getenv('STOCK_SHAREPOINT_EXCEL_FINANCE_TENANT_ID')
+
 REDIRECT_URI = os.getenv('REDIRECT_URI', 'http://localhost:8000')
 AUTHORITY = f"https://login.microsoftonline.com/{TENANT_ID}"
 TOKEN_FILE = "ms_token.json"
