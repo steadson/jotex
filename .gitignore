@@ -36,18 +36,20 @@ INPUT/
 data/cache/
 data/downloads/
 data/output/
+data/input/
 
 # Data files
 *.xlsx
 *.csv
 *.pkl
-*.json
+
 
 # Specific files to ignore
 read_files_setup.py
 read_files_sharepoint.py
 delete_customer_payment_testenv.py
 ms_token.json
+config/files_config.json
 
 # IDE files
 .idea/
