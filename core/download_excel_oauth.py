@@ -309,6 +309,7 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
     
     file_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}/content"
     
+    print('-' * 30)
     print(f"Downloading {file_name} from URL: {file_url}")
     response = requests.get(file_url, headers=headers)
     
