@@ -348,9 +348,15 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
     
     # Save only the new rows to a separate file
     if new_rows_count > 0:
-        new_rows_file = os.path.join(DOWNLOAD_DIR, f"new_rows_{file_name.replace('.xlsx', '.csv')}")
+        # Ensure subfolder for new_rows exists
+        new_rows_dir = os.path.join(DOWNLOAD_DIR, "new_rows")
+        os.makedirs(new_rows_dir, exist_ok=True)
+
+        # Save new rows to this subfolder
+        new_rows_file = os.path.join(new_rows_dir, f"{file_name.replace('.xlsx', '.csv')}")
         new_rows_df.to_csv(new_rows_file, index=False)
         print(f"Found {new_rows_count} new rows. Saved to '{new_rows_file}'")
+        print('-' * 30)
     else:
         print(f"No new rows found in {file_name}")
     
