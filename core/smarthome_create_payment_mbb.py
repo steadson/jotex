@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 # Load environment variables
 load_dotenv()
 
-def setup_logging(log_file='MBB_finance_workflow.log'):
+def setup_logging(log_file='SMARTHOME_MBB_finance_workflow.log'):
     current_date = datetime.now().strftime("%m%d%Y_%H%M")
     log_file = os.path.join('logs', f'{current_date}_SMARTHOME_MBB_finance_workflow.log')
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
