@@ -3,6 +3,7 @@ import requests
 from dotenv import load_dotenv
 import json
 import time
+import shutil
 
 # Load environment variables
 load_dotenv()
@@ -24,6 +25,9 @@ UPLOAD_PATHS = {
     "updated": "/FINANCE/TEMP/updated",
     "not_transferred": "/FINANCE/TEMP/not_transferred"
 }
+
+BACKUP_DIR = os.path.join(os.getcwd(), "data/output_backups")
+os.makedirs(BACKUP_DIR, exist_ok=True)
 
 def load_token():
     if os.path.exists(TOKEN_FILE):
@@ -72,8 +76,9 @@ def upload_file(file_path, graph_path, access_token):
 
     if response.ok:
         print(f"✅ Uploaded: {filename}")
-        os.remove(file_path)
-        print(f"🗑️ Deleted local file: {filename}")
+        backup_path = os.path.join(BACKUP_DIR, filename)
+        shutil.move(file_path, backup_path)
+        print(f"📦 Moved to backup: {backup_path}")
     else:
         print(f"❌ Upload failed for {filename}: {response.status_code} - {response.text}")
 
