@@ -400,8 +400,8 @@ def process_transactions(input_file, output_file, encoding='utf-8'):
 
 # Example usage
 if __name__ == "__main__":
-    input_folder = 'downloads'
-    input_file = Path(input_folder) / 'new_rows_PBB 2025.csv'
+    input_folder = 'downloads/new_rows'
+    input_file = Path(input_folder) / 'PBB 2025.csv'
     output_folder = 'OUTPUT'
     os.makedirs(output_folder, exist_ok=True)
     output_file = Path(output_folder) / 'PBB_2025_processed.csv'

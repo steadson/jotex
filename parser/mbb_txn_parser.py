@@ -206,8 +206,8 @@ def main():
     """
     Main function to run the MBB transaction parser.
     """
-    input_folder = 'downloads'
-    file_path = Path(input_folder) / 'new_rows_MBB 2025.csv'
+    input_folder = 'downloads/new_rows'
+    file_path = Path(input_folder) / 'MBB 2025.csv'
     output_folder = 'OUTPUT'
     os.makedirs(output_folder, exist_ok=True)
     output_file_path = Path(output_folder) / 'MBB_2025_processed.csv'

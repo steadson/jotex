@@ -339,7 +339,7 @@ def process_transactions(input_file, output_file):
 
 # Example usage
 if __name__ == "__main__":
-    input_file = Path('data/downloads') / 'new_rows_JOTEX PTE LTD MAYBANK SG 2025.csv'
+    input_file = Path('data/downloads/new_rows') / 'JOTEX PTE LTD MAYBANK SG 2025.csv'
     output_file = Path('data/temp') / 'SG_MBB_2025_processed.csv'
     
     # Create output directory if it doesn't exist
