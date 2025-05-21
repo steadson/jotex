@@ -159,8 +159,8 @@ def check_new_rows_from_output(output):
     # As a fallback, also check if the files exist and have content
 
     
-    mbb_new_rows_file = Path("downloads/new_rows_MBB 2025.csv")
-    pbb_new_rows_file = Path("downloads/new_rows_PBB 2025.csv")
+    mbb_new_rows_file = Path("downloads/new_rows/MBB 2025.csv")
+    pbb_new_rows_file = Path("downloads/new_rows/PBB 2025.csv")
     
     # If we couldn't determine from output, check if files exist and were recently modified
     if not mbb_has_new_rows and mbb_new_rows_file.exists():
@@ -339,7 +339,7 @@ def execute_workflow(continue_on_error=False):
         
         # Before running MBB parser, check if columns are empty in MBB file
         if step == 'nlp_parser/mbb_txn_parser_nlp.py':
-            mbb_file = Path("downloads/new_rows_MBB 2025.csv")
+            mbb_file = Path("downloads/new_rows/MBB 2025.csv")
             if not check_empty_columns(mbb_file):
                 logging.info("Skipping MBB workflow as specified columns have values")
                 print("Skipping MBB workflow as specified columns have values")
@@ -349,7 +349,7 @@ def execute_workflow(continue_on_error=False):
         
         # Before running PBB parser, check if columns are empty in PBB file
         elif step == 'nlp_parser/pbb_txn_parser_nlp.py':
-            pbb_file = Path("downloads/new_rows_PBB 2025.csv")
+            pbb_file = Path("downloads/new_rows/PBB 2025.csv")
             if not check_empty_columns(pbb_file):
                 logging.info("Skipping PBB workflow as specified columns have values")
                 print("Skipping PBB workflow as specified columns have values")
