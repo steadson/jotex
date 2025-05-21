@@ -18,6 +18,8 @@ import datetime
 import subprocess
 import sys
 from pathlib import Path
+import os
+import pandas as pd
 
 # Fix 1: Use relative imports since we're inside the core directory
 # from . import download_excel_oauth, create_pymt_mbb, create_pymt_pbb, upload_to_onedrive
@@ -155,8 +157,7 @@ def check_new_rows_from_output(output):
                 logging.info("Output indicates new PBB rows were created")
     
     # As a fallback, also check if the files exist and have content
-    import os
-    from pathlib import Path
+
     
     mbb_new_rows_file = Path("downloads/new_rows_MBB 2025.csv")
     pbb_new_rows_file = Path("downloads/new_rows_PBB 2025.csv")
@@ -164,7 +165,6 @@ def check_new_rows_from_output(output):
     # If we couldn't determine from output, check if files exist and were recently modified
     if not mbb_has_new_rows and mbb_new_rows_file.exists():
         try:
-            import pandas as pd
             mbb_df = pd.read_csv(mbb_new_rows_file)
             if len(mbb_df) > 0:
                 # Check if file was modified in the last 5 minutes
@@ -179,7 +179,6 @@ def check_new_rows_from_output(output):
     
     if not pbb_has_new_rows and pbb_new_rows_file.exists():
         try:
-            import pandas as pd
             pbb_df = pd.read_csv(pbb_new_rows_file)
             if len(pbb_df) > 0:
                 # Check if file was modified in the last 5 minutes
@@ -194,6 +193,48 @@ def check_new_rows_from_output(output):
     
     logging.info(f"New rows check result - MBB: {mbb_has_new_rows}, PBB: {pbb_has_new_rows}")
     return mbb_has_new_rows, pbb_has_new_rows
+
+def check_empty_columns(file_path, columns_to_check=None):
+    """
+    Check if specified columns in a CSV file are empty.
+    
+    Args:
+        file_path: Path to the CSV file to check
+        columns_to_check: List of column names to check for empty values
+        
+    Returns:
+        bool: True if all specified columns are empty, False if any have values
+    """
+    if columns_to_check is None:
+        columns_to_check = ["CUSTOMER_NAME", "DESCRIPTION", "STATUS", "payment_ID"]
+    
+    if not Path(file_path).exists():
+        logging.warning(f"File {file_path} does not exist, cannot check columns")
+        return True  # If file doesn't exist, consider columns as empty
+    
+    try:
+        df = pd.read_csv(file_path)
+        
+        # Check if all specified columns exist in the dataframe
+        existing_columns = [col for col in columns_to_check if col in df.columns]
+        
+        if not existing_columns:
+            logging.warning(f"None of the specified columns {columns_to_check} exist in {file_path}")
+            return True  # If none of the columns exist, consider them empty
+        
+        # Check if all values in the specified columns are empty
+        for col in existing_columns:
+            # Check if column has any non-empty values
+            if not df[col].isna().all() and not (df[col] == '').all():
+                logging.info(f"Column {col} in {file_path} has non-empty values")
+                return False  # At least one column has values
+        
+        logging.info(f"All specified columns in {file_path} are empty")
+        return True  # All columns are empty
+        
+    except Exception as e:
+        logging.error(f"Error checking columns in {file_path}: {e}")
+        return True  # On error, default to considering columns empty
 
 def execute_workflow(continue_on_error=False):
     """
@@ -292,7 +333,30 @@ def execute_workflow(continue_on_error=False):
         steps_to_run.append('upload_to_onedrive.py')
     
     # Run the selected steps
-    for step in steps_to_run:
+    i = 0
+    while i < len(steps_to_run):
+        step = steps_to_run[i]
+        
+        # Before running MBB parser, check if columns are empty in MBB file
+        if step == 'nlp_parser/mbb_txn_parser_nlp.py':
+            mbb_file = Path("downloads/new_rows_MBB 2025.csv")
+            if not check_empty_columns(mbb_file):
+                logging.info("Skipping MBB workflow as specified columns have values")
+                print("Skipping MBB workflow as specified columns have values")
+                # Skip this step and the next MBB-related step
+                i += 2
+                continue
+        
+        # Before running PBB parser, check if columns are empty in PBB file
+        elif step == 'nlp_parser/pbb_txn_parser_nlp.py':
+            pbb_file = Path("downloads/new_rows_PBB 2025.csv")
+            if not check_empty_columns(pbb_file):
+                logging.info("Skipping PBB workflow as specified columns have values")
+                print("Skipping PBB workflow as specified columns have values")
+                # Skip this step and the next PBB-related step
+                i += 2
+                continue
+        
         step_success = run_script(step)
         
         if not step_success:
@@ -301,6 +365,8 @@ def execute_workflow(continue_on_error=False):
                 logging.error(f"Workflow stopped due to error in step: {step}")
                 print(f"Workflow stopped due to error in step: {step}")
                 break
+        
+        i += 1
     
     return success
 
