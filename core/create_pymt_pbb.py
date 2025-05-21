@@ -229,11 +229,22 @@ class FinanceWorkflow:
             if response.status_code == 200:
                 customers = response.json().get('value', [])
                 if customers:
-                    return {
-                        'customerId': customers[0].get('id'),
-                        'customerNumber': customers[0].get('number'),
-                        'customerName': customers[0].get('displayName')
-                    }
+                    # Check if the first customer is blocked
+                    if customers[0].get('blocked') == "All" and len(customers) > 1:
+                        # If first customer is blocked and there's another customer, use the next one
+                        self.logger.info(f"First customer {customers[0].get('displayName')} is blocked, using next customer {customers[1].get('displayName')}")
+                        return {
+                            'customerId': customers[1].get('id'),
+                            'customerNumber': customers[1].get('number'),
+                            'customerName': customers[1].get('displayName')
+                        }
+                    else:
+                        # Use the first customer as before
+                        return {
+                            'customerId': customers[0].get('id'),
+                            'customerNumber': customers[0].get('number'),
+                            'customerName': customers[0].get('displayName')
+                        }
         except Exception as e:
             self.logger.error(f"Customer lookup failed: {e}")
         return None
