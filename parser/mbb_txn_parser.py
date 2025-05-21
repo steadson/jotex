@@ -141,67 +141,6 @@ def clean_descriptions(df):
     return descriptions
 
 
-
-def clean_descriptions(df):
-    """
-    Clean and create descriptions from transaction data.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing transaction data
-        
-    Returns:
-        pd.Series: Cleaned descriptions
-    """
-    # Combine transaction reference and description
-    descriptions = df.apply(
-        lambda row: f"{row['Transaction Ref']} {row['Transaction Description']}", 
-        axis=1
-    )
-    
-    # Apply all cleaning operations
-    descriptions = (descriptions
-        .str.replace(r'IBG PAYMENT INTO A/C.*', '', regex=True)  # Remove IBG payment text
-        .str.replace(r'MBB CT-.*', '', regex=True)        # Remove MBB CT text
-        .str.replace(r'-', '', regex=True)                # Remove "-" characters
-        .str.replace(r'\*', '', regex=True)               # Remove "*" characters
-        .str.replace(r'Fund transfer', '', regex=True)    # Remove "Fund transfer" text
-        .str.strip()                                      # Strip whitespace
-    )
-    
-    return descriptions
-
-
-
-
-def clean_descriptions(df):
-    """
-    Clean and create descriptions from transaction data.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing transaction data
-        
-    Returns:
-        pd.Series: Cleaned descriptions
-    """
-    # Combine transaction reference and description
-    descriptions = df.apply(
-        lambda row: f"{row['Transaction Ref']} {row['Transaction Description']}", 
-        axis=1
-    )
-    
-    # Apply all cleaning operations
-    descriptions = (descriptions
-        .str.replace(r'IBG PAYMENT INTO A/C.*', '', regex=True)  # Remove IBG payment text
-        .str.replace(r'MBB CT-.*', '', regex=True)        # Remove MBB CT text
-        .str.replace(r'-', '', regex=True)                # Remove "-" characters
-        .str.replace(r'\*', '', regex=True)               # Remove "*" characters
-        .str.replace(r'Fund transfer', '', regex=True)    # Remove "Fund transfer" text
-        .str.strip()                                      # Strip whitespace
-    )
-    
-    return descriptions
-
-
 def main():
     """
     Main function to run the MBB transaction parser.

@@ -37,12 +37,13 @@ data/cache/
 data/downloads/
 data/output/
 data/input/
+tests/mbb_txn_parser.py
 
 # Data files
 *.xlsx
 *.csv
 *.pkl
-
+*.ipynb
 
 # Specific files to ignore
 read_files_setup.py
