@@ -57,42 +57,59 @@ def parse_mbb_txn(file_path, encoding='utf-8'):
 
 def clean_customer_names(df):
     """
-    Clean and extract customer names from transaction data.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing transaction data
-        
-    Returns:
-        pd.Series: Cleaned customer names
+    Extracts and cleans customer names:
+    - If Transaction Description.1 has '*':
+        * Use part after '*' if it's non-empty and looks meaningful.
+        * Else use the part before '*'.
+    - If no '*', or if Transaction Description.1 is missing:
+        * Extract all content before any known patterns (dates, numbers, etc).
+    - Always strip and clean.
     """
-    # Extract customer name from appropriate column
-    customer_names = df.apply(
-        lambda row: row['Transaction Description.1'] 
-        if pd.notna(row['Transaction Description.1']) and row['Transaction Description.1'] != '-' 
-        else row['Transaction Description'], 
-        axis=1
-    )
+    def extract_name(row):
+        desc1 = str(row['Transaction Description.1']) if pd.notna(row['Transaction Description.1']) else ''
+        desc2 = str(row['Transaction Description']) if pd.notna(row['Transaction Description']) else ''
+
+        def clean_basic(text):
+            # Remove date patterns like (2-APR), (18APR2025), etc.
+            text = re.sub(r'\(\s*\d{1,2}[-]?[A-Za-z]{3,}[0-9]*\s*\)', '', text)
+            text = re.sub(r'\(\s*\)', '', text)  # Remove empty ()
+            return text.strip()
+
+        if desc1 and desc1 != '-':
+            parts = desc1.split('*')
+            if len(parts) == 2:
+                left, right = parts[0].strip(), parts[1].strip()
+                # Heuristic: use right side only if it's longer than 2 words or more than 10 characters
+                if right and (len(right.split()) >= 2 or len(right) >= 10):
+                    return clean_basic(right)
+                else:
+                    return clean_basic(left)
+            else:
+                return clean_basic(desc1)
+        else:
+            # Use fallback
+            # Extract uppercase chunks from fallback description
+            matches = re.findall(r'\b[A-Z][A-Z\s&.-]*[A-Z]\b', desc2)
+            if matches:
+                return clean_basic(matches[-1])
+            return clean_basic(desc2)
+
+    customer_names = df.apply(extract_name, axis=1)
     
     # Apply all cleaning operations
     customer_names = (customer_names
         .astype(str)
-        .str.replace(r'^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:invoice|invoices|payment|receipt)s?\s+', '', regex=True)  # Remove month date invoice prefixes
-        .str.replace(r'^\d+\s*', '', regex=True)           # Remove leading digits
-        .str.replace(r'\*.*','', regex=True)             # Remove content from asterisk onwards
-        .str.replace(r'@\w+', '', regex=True)              # Remove any "@" and content after it
-        .str.replace(r'-', '', regex=True)                 # Replace "-" with empty space
-        .str.replace(r'IBG PAYMENT INTO A/C\s*', '', regex=True)  # Remove IBG payment text
-        .str.replace(r'MBB CT\s*', '', regex=True)         # Remove MBB CT text
-        .str.replace(r'\[.*?\]', '', regex=True)           # Remove content within square brackets
-        .str.replace(r'\(\s*\)', '', regex=True)           # Remove only empty parentheses like "()"
-        .str.replace(r'\(\s*[0-9]+\s*\)', '', regex=True)  # Remove parentheses containing only numbers like "(123)"
-        .str.replace(r'\(\s*\d{1,2}[-]?[A-Za-z]{3}[-]?\d*\s*\)', '', regex=True)  # Remove date patterns like (18-APR) or (18APR)
-        .str.replace(r'SDN\.', 'SDN', regex=True)          # Replace 'SDN.' with 'SDN'
-        .str.replace(r'BHD\.', 'BHD', regex=True)          # Replace 'BHD.' with 'BHD'
-        .str.replace(r'BH\.', 'BH', regex=True)            # Replace 'BH.' with 'BH'
-        # Preserve the space between SDN and BH
-        .str.replace(r'SDN\s*BH', 'SDN BH', regex=True)    # Ensure space between SDN and BH
-        .str.strip()  
+        .str.replace(r'^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:invoice|invoices|inv|payment|receipt)s?\s+', '', regex=True)  # Remove month date invoice prefixes
+        .str.replace(r'@\w+', '', regex=True)
+        .str.replace(r'-', '', regex=True)
+        .str.replace(r'IBG PAYMENT INTO A/C\s*', '', regex=True)
+        .str.replace(r'MBB CT\s*', '', regex=True)
+        .str.replace(r'\[.*?\]', '', regex=True)
+        .str.replace(r'SDN\.', 'SDN', regex=True)
+        .str.replace(r'BHD\.', 'BHD', regex=True)
+        .str.replace(r'BH\.', 'BH', regex=True)
+        .str.replace(r'SDN\s*BH', 'SDN BH', regex=True)
+        .str.strip()
     )
     
     return customer_names
@@ -102,42 +119,39 @@ def extract_invoice_date(text):
     import re
     if not isinstance(text, str):
         return ""
-    match = re.search(r'^((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:invoice|invoices|payment|receipt)s?)\s+', text)
+    match = re.search(r'^((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{1,2}\s+(?:invoice|invoices|inv|payment|receipt)s?)\s+', text)
     return match.group(1) if match else ""
 
 def clean_descriptions(df):
     """
-    Clean and create descriptions from transaction data.
-    
-    Args:
-        df (pd.DataFrame): DataFrame containing transaction data
-        
-    Returns:
-        pd.Series: Cleaned descriptions
+    Clean and create descriptions from transaction data,
+    ensuring CUSTOMER_NAME is removed from the description.
     """
-    # Extract date invoice patterns from customer names
     invoice_dates = df.apply(
         lambda row: extract_invoice_date(str(row['Transaction Description.1'])), 
         axis=1
     )
-    
-    # Combine transaction reference, invoice date, and description
+
+    # Initial raw description construction
     descriptions = df.apply(
-        lambda row: f"{row['Transaction Ref']} {invoice_dates[row.name]} {row['Transaction Description']}", 
+        lambda row: f"{row['Transaction Ref']} {invoice_dates[row.name]} {row['Transaction Description']}".strip(), 
         axis=1
     )
-    
-    # Apply all cleaning operations
+
+    # Remove CUSTOMER_NAME from description
+    descriptions = descriptions.combine(df['CUSTOMER_NAME'], lambda desc, name: desc.replace(name, '').strip())
+
+    # Final cleaning
     descriptions = (descriptions
-        .str.replace(r'IBG PAYMENT INTO A/C.*', '', regex=True)  # Remove IBG payment text
-        .str.replace(r'MBB CT-.*', '', regex=True)        # Remove MBB CT text
-        .str.replace(r'-', '', regex=True)                # Remove "-" characters
-        .str.replace(r'\*', '', regex=True)               # Remove "*" characters
-        .str.replace(r'Fund transfer', '', regex=True)    # Remove "Fund transfer" text
-        .str.replace(r'\s+', ' ', regex=True)             # Replace multiple spaces with a single space
-        .str.strip()                                      # Strip whitespace
+        .str.replace(r'IBG PAYMENT INTO A/C.*', '', regex=True)
+        .str.replace(r'MBB CT-.*', '', regex=True)
+        .str.replace(r'-', '', regex=True)
+        .str.replace(r'\*', '', regex=True)
+        .str.replace(r'Fund transfer', '', regex=True)
+        .str.replace(r'\s+', ' ', regex=True)
+        .str.strip()
     )
-    
+
     return descriptions
 
 
