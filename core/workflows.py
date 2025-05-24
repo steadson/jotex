@@ -103,8 +103,8 @@ def get_workflow_steps():
     return [
         'core/download_excel_oauth.py',
         'nlp_parser/mbb_txn_parser_nlp.py', 
-        'core/create_pymt_mbb.py',
         'nlp_parser/pbb_txn_parser_nlp.py',
+        'core/create_pymt_mbb.py',
         'core/create_pymt_pbb.py',
         'core/upload_to_onedrive.py'
     ]
@@ -194,47 +194,67 @@ def check_new_rows_from_output(output):
     logging.info(f"New rows check result - MBB: {mbb_has_new_rows}, PBB: {pbb_has_new_rows}")
     return mbb_has_new_rows, pbb_has_new_rows
 
-def check_empty_columns(file_path, columns_to_check=None):
+
+def filter_empty_rows(file_path, columns_to_check=None):
     """
-    Check if specified columns in a CSV file are empty.
+    Filter rows where specified columns are empty and save only those rows.
     
     Args:
-        file_path: Path to the CSV file to check
+        file_path: Path to the CSV file to filter
         columns_to_check: List of column names to check for empty values
         
     Returns:
-        bool: True if all specified columns are empty, False if any have values
+        int: Number of rows with empty values in specified columns
     """
     if columns_to_check is None:
-        columns_to_check = ["CUSTOMER_NAME", "DESCRIPTION", "STATUS", "payment_ID"]
+        columns_to_check = ["CUSTOMER_NAME"]
     
     if not Path(file_path).exists():
-        logging.warning(f"File {file_path} does not exist, cannot check columns")
-        return True  # If file doesn't exist, consider columns as empty
+        logging.warning(f"File {file_path} does not exist, cannot filter rows")
+        return 0
     
     try:
         df = pd.read_csv(file_path)
+        original_count = len(df)
+        logging.info(f"Original file {file_path} has {original_count} rows")
         
         # Check if all specified columns exist in the dataframe
         existing_columns = [col for col in columns_to_check if col in df.columns]
         
         if not existing_columns:
             logging.warning(f"None of the specified columns {columns_to_check} exist in {file_path}")
-            return True  # If none of the columns exist, consider them empty
+            return original_count  # If none of the columns exist, keep all rows
         
-        # Check if all values in the specified columns are empty
+        # Create a mask for rows where ANY specified columns are empty
+        empty_mask = pd.Series([False] * len(df))  # Start with all False
+        
         for col in existing_columns:
-            # Check if column has any non-empty values
-            if not df[col].isna().all() and not (df[col] == '').all():
-                logging.info(f"Column {col} in {file_path} has non-empty values")
-                return False  # At least one column has values
+            # For each column, check if it's empty (NaN or empty string)
+            col_empty = df[col].isna() | (df[col] == '') | (df[col].astype(str).str.strip() == '')
+            empty_mask = empty_mask | col_empty  # Use OR to find any empty columns
         
-        logging.info(f"All specified columns in {file_path} are empty")
-        return True  # All columns are empty
+        # Filter to keep only rows where any specified columns are empty
+        filtered_df = df[empty_mask]
+        filtered_count = len(filtered_df)
+        
+        logging.info(f"Found {filtered_count} rows with empty values in columns {existing_columns}")
+        print(f"Found {filtered_count} rows with empty values in columns {existing_columns}")
+        
+        if filtered_count > 0:
+            # Save the filtered data back to the same file
+            filtered_df.to_csv(file_path, index=False)
+            logging.info(f"Saved {filtered_count} filtered rows to {file_path}")
+            print(f"Saved {filtered_count} filtered rows to {file_path}")
+        else:
+            logging.info(f"No rows with empty columns found in {file_path}")
+            print(f"No rows with empty columns found in {file_path}")
+        
+        return filtered_count
         
     except Exception as e:
-        logging.error(f"Error checking columns in {file_path}: {e}")
-        return True  # On error, default to considering columns empty
+        logging.error(f"Error filtering rows in {file_path}: {e}")
+        return 0
+
 
 def execute_workflow(continue_on_error=False):
     """
@@ -302,61 +322,64 @@ def execute_workflow(continue_on_error=False):
         return False
     
     # Check if new rows are available based on the download output
-    mbb_has_new_rows, pbb_has_new_rows = check_new_rows_from_output(download_output)
+    mbb_has_new_rows, pbb_has_new_rows =  (download_output)
     
     if not mbb_has_new_rows and not pbb_has_new_rows:
         logging.info("No new rows found for both MBB and PBB. Stopping workflow.")
         print("No new rows found for both MBB and PBB. Stopping workflow.")
         return True
     
-    # Determine which steps to run based on available new rows
-    steps_to_run = []
+    # Filter the downloaded files to keep only rows with empty columns
+    mbb_filtered_count = 0
+    pbb_filtered_count = 0
     
     if mbb_has_new_rows:
-        logging.info("New MBB rows found. Will run MBB-related steps.")
-        print("New MBB rows found. Will run MBB-related steps.")
-        steps_to_run.extend([
-            'nlp_parser/mbb_txn_parser_nlp.py',
-            'create_pymt_mbb.py'
-        ])
+        mbb_file = Path("downloads/new_rows/MBB 2025.csv")
+        mbb_filtered_count = filter_empty_rows(mbb_file)
+        if mbb_filtered_count == 0:
+            logging.info("No MBB rows with empty columns found after filtering")
+            print("No MBB rows with empty columns found after filtering")
+            mbb_has_new_rows = False
     
     if pbb_has_new_rows:
-        logging.info("New PBB rows found. Will run PBB-related steps.")
-        print("New PBB rows found. Will run PBB-related steps.")
+        pbb_file = Path("downloads/new_rows/PBB 2025.csv")
+        pbb_filtered_count = filter_empty_rows(pbb_file)
+        if pbb_filtered_count == 0:
+            logging.info("No PBB rows with empty columns found after filtering")
+            print("No PBB rows with empty columns found after filtering")
+            pbb_has_new_rows = False
+    
+    # Check if we still have rows to process after filtering
+    if not mbb_has_new_rows and not pbb_has_new_rows:
+        logging.info("No rows with empty columns found for both MBB and PBB after filtering. Stopping workflow.")
+        print("No rows with empty columns found for both MBB and PBB after filtering. Stopping workflow.")
+        return True
+    
+    # Determine which steps to run based on available filtered rows
+    steps_to_run = []
+    
+    if mbb_has_new_rows and mbb_filtered_count > 0:
+        logging.info(f"Will process {mbb_filtered_count} MBB rows with empty columns.")
+        print(f"Will process {mbb_filtered_count} MBB rows with empty columns.")
+        steps_to_run.extend([
+            'nlp_parser/mbb_txn_parser_nlp.py',
+            'core/create_pymt_mbb.py'
+        ])
+    
+    if pbb_has_new_rows and pbb_filtered_count > 0:
+        logging.info(f"Will process {pbb_filtered_count} PBB rows with empty columns.")
+        print(f"Will process {pbb_filtered_count} PBB rows with empty columns.")
         steps_to_run.extend([
             'nlp_parser/pbb_txn_parser_nlp.py',
-            'create_pymt_pbb.py'
+            'core/create_pymt_pbb.py'
         ])
     
     # Always add upload step if any processing was done
     if steps_to_run:
-        steps_to_run.append('upload_to_onedrive.py')
+        steps_to_run.append('core/upload_to_onedrive.py')
     
     # Run the selected steps
-    i = 0
-    while i < len(steps_to_run):
-        step = steps_to_run[i]
-        
-        # Before running MBB parser, check if columns are empty in MBB file
-        if step == 'nlp_parser/mbb_txn_parser_nlp.py':
-            mbb_file = Path("downloads/new_rows/MBB 2025.csv")
-            if not check_empty_columns(mbb_file):
-                logging.info("Skipping MBB workflow as specified columns have values")
-                print("Skipping MBB workflow as specified columns have values")
-                # Skip this step and the next MBB-related step
-                i += 2
-                continue
-        
-        # Before running PBB parser, check if columns are empty in PBB file
-        elif step == 'nlp_parser/pbb_txn_parser_nlp.py':
-            pbb_file = Path("downloads/new_rows/PBB 2025.csv")
-            if not check_empty_columns(pbb_file):
-                logging.info("Skipping PBB workflow as specified columns have values")
-                print("Skipping PBB workflow as specified columns have values")
-                # Skip this step and the next PBB-related step
-                i += 2
-                continue
-        
+    for step in steps_to_run:
         step_success = run_script(step)
         
         if not step_success:
@@ -365,8 +388,6 @@ def execute_workflow(continue_on_error=False):
                 logging.error(f"Workflow stopped due to error in step: {step}")
                 print(f"Workflow stopped due to error in step: {step}")
                 break
-        
-        i += 1
     
     return success
 
