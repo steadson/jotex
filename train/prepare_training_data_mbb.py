@@ -1,5 +1,4 @@
 import pandas as pd
-import argparse
 from pathlib import Path
 
 def prepare_training_data(input_csv_path, output_training_path):
@@ -47,12 +46,9 @@ def prepare_training_data(input_csv_path, output_training_path):
     return training_df
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description='Prepare customer name training data')
-    parser.add_argument('--input_csv', required=True, help='Path to processed transactions CSV')
-    parser.add_argument('--output_training', default='customer_name_training.csv', 
-                       help='Path to save training data')
-    
-    args = parser.parse_args()
+    file_name = 'MBB_2025.csv'
+    input_csv = Path('data/input') / file_name
+    output_training = Path('data/training') / file_name
     
     # Prepare training data
-    prepare_training_data(args.input_csv, args.output_training)
+    prepare_training_data(input_csv, output_training)

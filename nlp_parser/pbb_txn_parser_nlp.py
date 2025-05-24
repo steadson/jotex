@@ -69,6 +69,8 @@ def clean_description(description):
         return ""
     description = str(description).strip()
     description = description.replace('SDN', '')
+    description = description.replace('BHD', '')
+
     if description == "Fund transfer":
         return ""
     elif description.startswith("Fund transfer "):

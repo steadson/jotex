@@ -1,0 +1,164 @@
+{
+  "nodes": [
+    {
+      "parameters": {
+        "interval": 300,
+        "unit": "minutes"
+      },
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "operation": "getRows",
+        "sheetId": "your-sheet-id-or-name",
+        "options": {}
+      },
+      "name": "Read Excel Rows",
+      "type": "n8n-nodes-base.microsoftExcel",
+      "typeVersion": 1,
+      "position": [450, 300],
+      "credentials": {
+        "microsoftExcelOAuth2Api": "your-microsoft-excel-credentials"
+      }
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "previousRowCount",
+              "value": "0"
+            }
+          ]
+        }
+      },
+      "name": "Set Previous Row Count",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [650, 200]
+    },
+    {
+      "parameters": {
+        "functionCode": "const currentRows = $items(\"Read Excel Rows\").length;\nconst previousCount = parseInt($node[\"Set Previous Row Count\"].json[\"previousRowCount\"]);\n\nreturn [{ json: { currentRows, previousCount, newRowsCount: currentRows - previousCount }}];"
+      },
+      "name": "Compare Row Counts",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [850, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "number": [
+            {
+              "value1": "={{$json[\"currentRows\"]}}",
+              "operation": "larger",
+              "value2": "={{$json[\"previousCount\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Check New Rows Added",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "const currentRows = $json[\"currentRows\"];\nconst previousCount = $json[\"previousCount\"];\nconst allRows = $items(\"Read Excel Rows\");\n\n// Extract new rows only\nconst newRows = allRows.slice(previousCount, currentRows);\n\nreturn newRows.map(item => ({ json: item.json }));"
+      },
+      "name": "Get New Rows",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1250, 300]
+    },
+    {
+      "parameters": {
+        "values": {
+          "number": [
+            {
+              "name": "previousRowCount",
+              "value": "={{$json[\"currentRows\"]}}"
+            }
+          ]
+        }
+      },
+      "name": "Update Previous Row Count",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 1,
+      "position": [1450, 300]
+    }
+  ],
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Read Excel Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Excel Rows": {
+      "main": [
+        [
+          {
+            "node": "Set Previous Row Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Previous Row Count": {
+      "main": [
+        [
+          {
+            "node": "Compare Row Counts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Row Counts": {
+      "main": [
+        [
+          {
+            "node": "Check New Rows Added",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check New Rows Added": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Get New Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get New Rows": {
+      "main": [
+        [
+          {
+            "node": "Update Previous Row Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  }
+}
