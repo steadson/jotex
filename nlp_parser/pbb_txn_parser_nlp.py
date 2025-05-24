@@ -28,8 +28,12 @@ def clean_customer_name(name):
         return '', ''
     name = str(name).strip().rstrip('.')
     name = re.sub(r'SDN\.\s*BHD\.?', 'SDN BHD', name)
+    name = name.replace('SDN.', 'SDN')
+    name = name.replace('BHD.', 'BHD')
     if name.endswith('SB'):
         name = name.replace('SB', '').strip()
+    if name.endswith('CUS'):
+        name = name.replace('CUS', '').strip()
     
     # Remove patterns like "XXXXXX2108"
     name = re.sub(r'\b[A-Z]{6}\d{4}\b', '', name).strip()  # Adjust regex as needed
@@ -64,6 +68,7 @@ def clean_description(description):
     if not description:
         return ""
     description = str(description).strip()
+    description = description.replace('SDN', '')
     if description == "Fund transfer":
         return ""
     elif description.startswith("Fund transfer "):
@@ -88,7 +93,8 @@ def process_transaction_generic(txn_desc, split_marker):
             desc_start_idx = match.start()
     customer_name = after_no[:desc_start_idx].strip()
     description = after_no[desc_start_idx:].strip() if desc_start_idx < len(after_no) else ''
-    customer_name = ' '.join(word for word in customer_name.split() if word.isupper())
+    # Modified line to include names with "&" regardless of case
+    customer_name = ' '.join(word for word in customer_name.split() if word.isupper() or '&' in word)
     return customer_name, description
 
 def process_duitnow_transaction(txn_desc):
@@ -117,7 +123,7 @@ def process_cheq_transaction(txn_desc):
     else:
         customer_name = after_asterisk
         description = ''
-    customer_name = ' '.join(word for word in customer_name.split() if word.isupper())
+    customer_name = ' '.join(word for word in customer_name.split() if word.isupper() or '&' in word)
     return customer_name, description
 
 def predict_customer_name(txn_desc, model_data):
