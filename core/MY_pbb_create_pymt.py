@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 def setup_logging(log_file='PBB_finance_workflow.log'):
-    current_date = datetime.now().strftime("%m%d%Y_%H%M")
+    current_date = datetime.now().strftime("%d%m%Y_%H%M")
     log_file = os.path.join('logs', f'{current_date}_PBB_finance_workflow.log')
     os.makedirs(os.path.dirname(log_file), exist_ok=True)
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s',
