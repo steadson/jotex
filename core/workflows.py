@@ -47,15 +47,42 @@ from parser import SG_mbb_txn_parser, smarthome_mbb_txn_parser
 
 def filter_empty_rows(file_path, key_column="CUSTOMER_NAME"):
     if not Path(file_path).exists():
+        logging.error(f"File does not exist: {file_path}")
         return False
     try:
-        df = pd.read_csv(file_path)
-        df_filtered = df[df[key_column].isna() | (df[key_column].astype(str).str.strip() == "")]
+        # Read CSV with explicit encoding and handle potential BOM
+        df = pd.read_csv(file_path, encoding='utf-8-sig')
+        logging.info(f"Reading file {file_path} - Found {len(df)} rows")
+        logging.info(f"Columns in file: {df.columns.tolist()}")
+        
+        # Find the exact column name (case-insensitive)
+        matching_columns = [col for col in df.columns if col.strip().upper() == key_column.upper()]
+        if not matching_columns:
+            logging.error(f"Column '{key_column}' not found in file. Available columns: {df.columns.tolist()}")
+            return False
+            
+        actual_column = matching_columns[0]
+        logging.info(f"Using column: '{actual_column}'")
+        
+        # More comprehensive empty value check
+        df_filtered = df[
+            df[actual_column].isna() |  # NaN values
+            (df[actual_column].astype(str).str.strip() == "") |  # Empty strings
+            (df[actual_column].astype(str).str.strip() == "nan") |  # "nan" strings
+            (df[actual_column].astype(str).str.strip() == "None")  # "None" strings
+        ]
+        
+        logging.info(f"Found {len(df_filtered)} rows with empty {key_column}")
         if not df_filtered.empty:
-            df_filtered.to_csv(file_path, index=False)
+            df_filtered.to_csv(file_path, index=False, encoding='utf-8-sig')
+            logging.info(f"Saved filtered data back to {file_path}")
             return True
+        else:
+            logging.info(f"No empty {key_column} values found in {file_path}")
     except Exception as e:
         logging.error(f"Error processing {file_path}: {e}")
+        import traceback
+        logging.error(traceback.format_exc())
     return False
 
 
@@ -83,22 +110,22 @@ def execute_workflow():
     # Step 2 & 3: Conditional processing
     steps = [
         {
-            "file": "downloads/new_rows/MBB 2025.csv",
+            "file": "data/downloads/new_rows/MBB 2025.csv",
             "parser": MY_mbb_txn_parser_nlp,
             "payment": MY_mbb_create_pymt
         },
         {
-            "file": "downloads/new_rows/PBB 2025.csv",
+            "file": "data/downloads/new_rows/PBB 2025.csv",
             "parser": MY_pbb_txn_parser_nlp,
             "payment": MY_pbb_create_pymt
         },
         {
-            "file": "downloads/new_rows/SG_MBB.csv",
+            "file": "data/downloads/new_rows/JOTEX PTE LTD MAYBANK SG 2025.csv",
             "parser": SG_mbb_txn_parser,
             "payment": SG_mbb_create_pymt
         },
         {
-            "file": "downloads/new_rows/Smarthome_MBB.csv",
+            "file": "data/downloads/new_rows/Smarthome MBB 2025.csv",
             "parser": smarthome_mbb_txn_parser,
             "payment": smarthome_mbb_create_pymt
         }
