@@ -337,8 +337,8 @@ def process_transactions(input_file, output_file):
         traceback.print_exc()
         return False
 
-# Example usage
-if __name__ == "__main__":
+def main():
+    """Main function to be called by the workflow orchestrator."""
     input_file = Path('data/downloads/new_rows') / 'JOTEX PTE LTD MAYBANK SG 2025.csv'
     output_file = Path('data/temp') / 'SG_MBB_2025_processed.csv'
     
@@ -348,6 +348,12 @@ if __name__ == "__main__":
     success = process_transactions(input_file, output_file)
     
     if success:
-        print("Processing completed successfully!")
+        print("SG MBB transaction parsing completed successfully!")
+        return True
     else:
-        print("Processing failed. Check the error messages above.")
+        print("SG MBB transaction parsing failed. Check the error messages above.")
+        return False
+
+# Example usage
+if __name__ == "__main__":
+    main()
