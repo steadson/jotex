@@ -398,8 +398,7 @@ def process_transactions(input_file, output_file, encoding='utf-8'):
         traceback.print_exc()
         return False
 
-# Example usage
-if __name__ == "__main__":
+def main():
     input_folder = 'downloads/new_rows'
     input_file = Path(input_folder) / 'PBB 2025.csv'
     output_folder = 'OUTPUT'
@@ -412,3 +411,6 @@ if __name__ == "__main__":
         print("Processing completed successfully!")
     else:
         print("Processing failed. Check the error messages above.")
+
+if __name__ == "__main__":
+    main()
