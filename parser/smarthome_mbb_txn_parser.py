@@ -1,6 +1,7 @@
 import pandas as pd
 import re
 import os
+from pathlib import Path
 
 def clean_company_name(name):
     """Clean company name by removing special characters and extra spaces"""
@@ -108,8 +109,8 @@ def parse_smarthome_transactions(input_csv_path, output_csv_path):
 
 def main():
     """Main function to run the parser"""
-    input_csv_path = 'data/train_data/smarthome_input.csv'
-    output_csv_path = 'data/train_data/smarthome_output.csv'
+    input_csv_path = Path('data/downloads/new_rows') / 'Smarthome MBB 2025.csv'
+    output_csv_path = Path('data/temp') / 'Smarthome_MBB_2025_processed.csv'
     
     print(f"Parsing transactions from {input_csv_path}...")
     df = parse_smarthome_transactions(input_csv_path, output_csv_path)
