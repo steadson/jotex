@@ -37,8 +37,7 @@ import pandas as pd
 sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 # Core components
-import download_excel_oauth, MY_mbb_create_pymt, MY_pbb_create_pymt, upload_to_onedrive
-import SG_mbb_create_pymt, smarthome_mbb_create_pymt
+import download_excel_oauth, MY_mbb_create_pymt, MY_pbb_create_pymt, SG_mbb_create_pymt, smarthome_mbb_create_pymt, upload_to_onedrive
 
 # Parsers
 from nlp_parser import MY_mbb_txn_parser_nlp, MY_pbb_txn_parser_nlp
@@ -100,11 +99,20 @@ def execute_workflow():
     print("Starting workflow execution")
 
     # Step 1: Download transactions
+    new_rows_downloaded = False  # Add a flag to track if any new rows were downloaded
+
     try:
         subprocess.run([sys.executable, "core/download_excel_oauth.py"], check=True)
-
+        # Check if any new rows were downloaded (based on logs or a return value from the download script)
+        new_rows_downloaded = True  # Set this based on actual logic
     except Exception as e:
         logging.error(f"Download failed: {e}")
+        return
+
+    # Skip processing if no new rows were downloaded
+    if not new_rows_downloaded:
+        logging.info("No new rows downloaded. Skipping processing.")
+        print("No new rows downloaded. Skipping processing.")
         return
 
     # Step 2 & 3: Conditional processing
