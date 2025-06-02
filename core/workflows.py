@@ -161,7 +161,7 @@ def main():
     log_dir = Path("logs")
     log_dir.mkdir(exist_ok=True)
     timestamp = datetime.datetime.now().strftime('%d%m%Y_%H%M%S')
-    log_file = log_dir / f"workflow_{timestamp}.log"
+    log_file = log_dir / f"{timestamp}_workflow.log"
 
     logging.basicConfig(
         filename=log_file,
