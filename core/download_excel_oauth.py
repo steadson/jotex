@@ -9,12 +9,16 @@ from io import BytesIO
 from dotenv import load_dotenv
 import time
 import hashlib
+import logging
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from modules.access_auth import get_ms_access_token
+from modules.logger import setup_logging
 
 load_dotenv()
+
+setup_logging('download_excel')
 
 # Directory for storing downloaded files and cache
 DOWNLOAD_DIR = os.path.join(os.getcwd(), "data/downloads")
@@ -81,7 +85,7 @@ def identify_new_rows(new_df, file_name):
     
     # If no cached data exists, all rows are new
     if not os.path.exists(cached_data_path):
-        print(f"No cached data found for {file_name}. All rows are considered new.")
+        logging.warning(f"No cached data found for {file_name}. All rows are considered new.")
         # Save current data as cache
         new_df.to_csv(cached_data_path, index=False)
         return new_df, len(new_df)
@@ -105,7 +109,7 @@ def identify_new_rows(new_df, file_name):
     
     # If we have too many columns, try to generate a hash
     if len(key_columns) > 5:
-        print("Many columns found - creating hash of row values to identify unique rows")
+        logging.info("Many columns found - creating hash of row values to identify unique rows")
         # Create hash for each row in both dataframes based on string values
         new_df['row_hash'] = new_df.astype(str).apply(
             lambda row: hashlib.md5(''.join(row).encode()).hexdigest(), axis=1
@@ -123,7 +127,7 @@ def identify_new_rows(new_df, file_name):
         new_rows_df = new_rows_df.drop('row_hash', axis=1)
     else:
         # Use the identified key columns to find new rows
-        print(f"Using columns {key_columns} to identify unique rows")
+        logging.info(f"Using columns {key_columns} to identify unique rows")
         
         # If dataframes are empty or have no matching columns, handle the edge case
         if len(key_columns) == 0 or cached_df.empty or new_df.empty:
@@ -167,7 +171,7 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
     
     # Check if file has been modified since last download
     if cached_info and cached_info.get("etag") == metadata.get("eTag"):
-        print(f"File {file_name} has not changed since last download.")
+        logging.info(f"File {file_name} has not changed since last download.")
         return None, 0
     
     # Download the file content
@@ -178,8 +182,8 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
     
     file_url = f"https://graph.microsoft.com/v1.0/drives/{drive_id}/items/{item_id}/content"
     
-    print('-' * 30)
-    print(f"Downloading {file_name} from URL: {file_url}")
+    logging.info('-' * 30)
+    logging.info(f"Downloading {file_name} from URL: {file_url}")
     response = requests.get(file_url, headers=headers)
     
     if response.status_code != 200:
@@ -194,21 +198,21 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
     # Get all available sheets for logging
     excel_file = pd.ExcelFile(excel_data)
     available_sheets = excel_file.sheet_names
-    print(f"Available sheets in {file_name}: {available_sheets}")
+    logging.info(f"Available sheets in {file_name}: {available_sheets}")
     
     # Read the specified sheet
     if sheet_name in available_sheets:
-        print(f"Reading sheet: {sheet_name}")
+        logging.info(f"Reading sheet: {sheet_name}")
         df = pd.read_excel(excel_data, sheet_name=sheet_name)
     else:
-        print(f"Sheet '{sheet_name}' not found. Using first sheet: {available_sheets[0]}")
+        logging.warning(f"Sheet '{sheet_name}' not found. Using first sheet: {available_sheets[0]}")
         df = pd.read_excel(excel_data, sheet_name=0)  # Use first sheet as fallback
     
     # Identify new rows only
     new_rows_df, new_rows_count = identify_new_rows(df, file_name)
 
     if new_rows_count == 0:
-        print(f"No new rows found in {file_name}. Skipping download and cache update.")
+        logging.warning(f"No new rows found in {file_name}. Skipping download and cache update.")
         return None, 0
 
     # Save the full file locally only if new rows exist
@@ -216,7 +220,7 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
     with open(output_file, 'wb') as f:
         f.write(response.content)
 
-    print(f"Full file saved as '{output_file}'")
+    logging.info(f"Full file saved as '{output_file}'")
 
     
     # Save only the new rows to a separate file
@@ -228,10 +232,10 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
         # Save new rows to this subfolder
         new_rows_file = os.path.join(new_rows_dir, f"{file_name.replace('.xlsx', '.csv')}")
         new_rows_df.to_csv(new_rows_file, index=False)
-        print(f"Found {new_rows_count} new rows. Saved to '{new_rows_file}'")
-        print('-' * 30)
+        logging.info(f"Found {new_rows_count} new rows. Saved to '{new_rows_file}'")
+        logging.info('-' * 30)
     else:
-        print(f"No new rows found in {file_name}")
+        logging.info(f"No new rows found in {file_name}")
     
     # Update cached file info
     save_cached_file_info(file_name, metadata)
@@ -247,8 +251,8 @@ if __name__ == "__main__":
                 config = json.load(f)
                 files_to_download = config["files_to_download"]
         except (FileNotFoundError, json.JSONDecodeError, KeyError) as e:
-            print(f"Error loading configuration from {config_file}: {e}")
-            print("Please ensure the JSON file exists and has the correct format.")
+            logging.warning(f"Error loading configuration from {config_file}: {e}")
+            logging.warning("Please ensure the JSON file exists and has the correct format.")
             exit(1)
         
         # Get access token (will try to use saved token first, only opening browser if needed)
@@ -271,7 +275,7 @@ if __name__ == "__main__":
             )
             total_new_rows += new_rows_count
             
-        print(f"\nProcess completed! Downloaded {total_new_rows} new rows across all files.")
+        logging.info(f"\nProcess completed! Downloaded {total_new_rows} new rows across all files.")
         
     except Exception as e:
-        print(f"Error: {e}")
+        logging.error(f"Error: {e}")
