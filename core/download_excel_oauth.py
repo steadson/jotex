@@ -336,15 +336,20 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
         print(f"Sheet '{sheet_name}' not found. Using first sheet: {available_sheets[0]}")
         df = pd.read_excel(excel_data, sheet_name=0)  # Use first sheet as fallback
     
-    # Save the full file locally
+    # Identify new rows only
+    new_rows_df, new_rows_count = identify_new_rows(df, file_name)
+
+    if new_rows_count == 0:
+        print(f"No new rows found in {file_name}. Skipping download and cache update.")
+        return None, 0
+
+    # Save the full file locally only if new rows exist
     output_file = os.path.join(DOWNLOAD_DIR, file_name)
     with open(output_file, 'wb') as f:
         f.write(response.content)
-        
+
     print(f"Full file saved as '{output_file}'")
-    
-    # Identify new rows only
-    new_rows_df, new_rows_count = identify_new_rows(df, file_name)
+
     
     # Save only the new rows to a separate file
     if new_rows_count > 0:
