@@ -154,8 +154,7 @@ def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
         raise ValueError(f"Error reading the CSV file: {e}")
 
     # Validate required columns exist
-    required_columns = ['Transaction Description.1', 'Transaction Description', 
-                        'Transaction Ref', 'Posting date']
+    required_columns = ['Transaction Description.1', 'Transaction Description', 'Transaction Ref', 'Posting date']
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
@@ -233,16 +232,10 @@ def clean_descriptions(descriptions):
     return descriptions
 
 
-def main():
+def main(input_dir, output_dir):
     """
     Main function to run the MBB transaction parser.
     """
-    input_folder = 'data/downloads/new_rows'
-    file_path = Path(input_folder) / 'MBB 2025.csv'
-    output_folder = 'data/temp'
-    os.makedirs(output_folder, exist_ok=True)
-    output_file_path = Path(output_folder) / 'MBB_2025_processed.csv'
-    
     # Path to your trained model
     model_path = 'mbb_my_customer_name_model.pkl'
     
@@ -258,13 +251,13 @@ def main():
                 print(f"Warning: Could not load model: {e}")
         
         # Parse the transactions with ML enhancement
-        print(f"Processing {file_path}")
-        df = parse_mbb_txn(file_path, model_data=model_data)
+        print(f"Processing {input_dir}")
+        df = parse_mbb_txn(input_dir, model_data=model_data)
         print(f"Processed {len(df)} transactions")
         
         # Save to CSV
-        df.to_csv(output_file_path, index=False)
-        print(f"Saved processed data to {output_file_path}")
+        df.to_csv(output_dir, index=False)
+        print(f"Saved processed data to {output_dir}")
             
     except Exception as e:
         print(f"Error: {str(e)}")
@@ -273,4 +266,9 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    input_folder = 'data/downloads/new_rows'
+    file_path = Path(input_folder) / 'MBB 2025.csv'
+    output_folder = 'data/temp'
+    os.makedirs(output_folder, exist_ok=True)
+    output_file_path = Path(output_folder) / 'MBB_2025_processed.csv'
+    main(file_path, output_file_path)
