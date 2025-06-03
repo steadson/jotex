@@ -99,13 +99,12 @@ def parse_smarthome_transactions(input_csv_path, output_csv_path):
     # Filter out empty rows
     df = df[df['Transaction Description'].notna() | df['Transaction Description.1'].notna() | df['Transaction Ref'].notna()]
     
-    # Keep only the necessary columns
-    result_df = df[['Transaction Description', 'Transaction Description.1', 'Transaction Ref', 'CUSTOMER_NAME', 'DESCRIPTION']]
+
     
     # Save the parsed data to a new CSV file
-    result_df.to_csv(output_csv_path, index=False)
+    df.to_csv(output_csv_path, index=False)
     
-    return result_df
+    return df
 
 def main():
     """Main function to run the parser"""
