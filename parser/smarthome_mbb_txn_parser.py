@@ -26,7 +26,7 @@ def extract_customer_name(row):
     """
     desc1 = str(row.get('Transaction Description', '')) if not pd.isna(row.get('Transaction Description', '')) else ''
     desc2 = str(row.get('Transaction Description.1', '')) if not pd.isna(row.get('Transaction Description.1', '')) else ''
-    ref = str(row.get(' Transaction Ref ', '')) if not pd.isna(row.get(' Transaction Ref ', '')) else ''
+    ref = str(row.get('Transaction Ref', '')) if not pd.isna(row.get('Transaction Ref', '')) else ''
     
     # Skip empty rows
     if not desc1 and not desc2 and not ref:
@@ -88,19 +88,19 @@ def parse_smarthome_transactions(input_csv_path, output_csv_path):
     # Ensure the column names are correct
     if 'Transaction Description.1' not in df.columns and 'Transaction Description' in df.columns:
         # Rename columns to match expected format
-        df.columns = ['Transaction Description', 'Transaction Description.1', ' Transaction Ref '] + list(df.columns[3:])
+        df.columns = ['Transaction Description', 'Transaction Description.1', 'Transaction Ref'] + list(df.columns[3:])
     
     # Extract CUSTOMER_NAME
     df['CUSTOMER_NAME'] = df.apply(extract_customer_name, axis=1)
     
     # For DESCRIPTION, just use the Transaction Ref as a placeholder
-    df['DESCRIPTION'] = df[' Transaction Ref ']
+    df['DESCRIPTION'] = df['Transaction Ref']
     
     # Filter out empty rows
-    df = df[df['Transaction Description'].notna() | df['Transaction Description.1'].notna() | df[' Transaction Ref '].notna()]
+    df = df[df['Transaction Description'].notna() | df['Transaction Description.1'].notna() | df['Transaction Ref'].notna()]
     
     # Keep only the necessary columns
-    result_df = df[['Transaction Description', 'Transaction Description.1', ' Transaction Ref ', 'CUSTOMER_NAME', 'DESCRIPTION']]
+    result_df = df[['Transaction Description', 'Transaction Description.1', 'Transaction Ref', 'CUSTOMER_NAME', 'DESCRIPTION']]
     
     # Save the parsed data to a new CSV file
     result_df.to_csv(output_csv_path, index=False)
