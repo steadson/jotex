@@ -13,154 +13,115 @@ load_dotenv()
 # ==========================
 # Business Central Auth (BC)
 # ==========================
-def get_bc_auth_token():
-    """
-    Retrieve an access token for Business Central using client credentials.
-    """
-    tenant_id = os.getenv('TENANT_ID')
-    client_id = os.getenv('CLIENT_ID')
-    client_secret = os.getenv('CLIENT_SECRET')
+class BusinessCentralAuth:
+    def __init__(self, tenant_id, client_id, client_secret):
+        self.tenant_id = tenant_id
+        self.client_id = client_id
+        self.client_secret = client_secret
 
-    if not all([tenant_id, client_id, client_secret]):
-        logging.error("Missing BC OAuth credentials in .env file")
-        return None
+    def get_access_token(self):
+        token_url = f"https://login.microsoftonline.com/{self.tenant_id}/oauth2/v2.0/token"
+        token_data = {
+            'grant_type': 'client_credentials',
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'scope': 'https://api.businesscentral.dynamics.com/.default'
+        }
 
-    token_url = f"https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token"
-    token_data = {
-        'grant_type': 'client_credentials',
-        'client_id': client_id,
-        'client_secret': client_secret,
-        'scope': 'https://api.businesscentral.dynamics.com/.default'
-    }
+        try:
+            response = requests.post(token_url, data=token_data)
+            response.raise_for_status()
+            return response.json().get('access_token')
+        except requests.RequestException as e:
+            logging.error(f"Error obtaining BC token: {e}")
+            return None
 
-    try:
-        response = requests.post(token_url, data=token_data)
-        response.raise_for_status()
-        return response.json().get('access_token')
-    except requests.RequestException as e:
-        logging.error(f"Error obtaining BC token: {e}")
-        return None
 
 
 # =====================
 # Microsoft Auth (MS)
 # =====================
-MS_CLIENT_ID = os.getenv('STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_ID')
-MS_CLIENT_SECRET = os.getenv('STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_SECRET')
-MS_TENANT_ID = os.getenv('STOCK_SHAREPOINT_EXCEL_FINANCE_TENANT_ID')
-MS_REDIRECT_URI = os.getenv('REDIRECT_URI', 'http://localhost:8000')
 
-MS_AUTHORITY = f"https://login.microsoftonline.com/{MS_TENANT_ID}"
-MS_TOKEN_FILE = "ms_token.json"
-MS_SCOPE = "Files.Read Files.Read.All Sites.Read.All offline_access"
+class MicrosoftAuth:
+    def __init__(self, client_id, client_secret, tenant_id, redirect_uri, token_file, scope):
+        self.client_id = client_id
+        self.client_secret = client_secret
+        self.tenant_id = tenant_id
+        self.redirect_uri = redirect_uri
+        self.token_file = token_file
+        self.scope = scope
+        self.authority = f"https://login.microsoftonline.com/{tenant_id}"
 
+    def _get_auth_code(self):
+        auth_url = f"{self.authority}/oauth2/v2.0/authorize"
+        auth_params = {
+            'client_id': self.client_id,
+            'response_type': 'code',
+            'redirect_uri': self.redirect_uri,
+            'scope': self.scope,
+            'response_mode': 'query'
+        }
+        full_url = f"{auth_url}?{urlencode(auth_params)}"
+        webbrowser.open(full_url)
+        redirect_response = input("Paste the full redirect URL: ")
 
-def get_ms_auth_code():
-    """
-    Open browser for user to authenticate and return the authorization code.
-    """
-    auth_url = f"{MS_AUTHORITY}/oauth2/v2.0/authorize"
-    auth_params = {
-        'client_id': MS_CLIENT_ID,
-        'response_type': 'code',
-        'redirect_uri': MS_REDIRECT_URI,
-        'scope': MS_SCOPE,
-        'response_mode': 'query'
-    }
+        parsed_url = urlparse(redirect_response)
+        return parse_qs(parsed_url.query).get('code', [None])[0]
 
-    full_url = f"{auth_url}?{urlencode(auth_params)}"
-    webbrowser.open(full_url)
-    redirect_response = input("Paste the full redirect URL: ")
+    def _get_token_from_code(self, code):
+        token_url = f"{self.authority}/oauth2/v2.0/token"
+        data = {
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'grant_type': 'authorization_code',
+            'code': code,
+            'redirect_uri': self.redirect_uri,
+            'scope': self.scope
+        }
 
-    parsed_url = urlparse(redirect_response)
-    code = parse_qs(parsed_url.query).get('code', [None])[0]
+        response = requests.post(token_url, data=data)
+        token_info = response.json()
 
-    if not code:
-        raise Exception("Authorization code not found in the URL")
+        if 'access_token' in token_info and 'refresh_token' in token_info:
+            token_info['expires_at'] = time.time() + token_info.get('expires_in', 3600)
+            with open(self.token_file, 'w') as f:
+                json.dump(token_info, f)
+            return token_info['access_token']
+        raise Exception(f"Failed to obtain tokens: {token_info}")
 
-    return code
+    def _refresh_token(self):
+        if not os.path.exists(self.token_file):
+            return None
 
+        with open(self.token_file, 'r') as f:
+            token_info = json.load(f)
 
-def get_ms_token_from_code(code):
-    """
-    Exchange authorization code for access and refresh tokens.
-    """
-    token_url = f"{MS_AUTHORITY}/oauth2/v2.0/token"
-    data = {
-        'client_id': MS_CLIENT_ID,
-        'client_secret': MS_CLIENT_SECRET,
-        'grant_type': 'authorization_code',
-        'code': code,
-        'redirect_uri': MS_REDIRECT_URI,
-        'scope': MS_SCOPE
-    }
+        if token_info.get('expires_at', 0) > time.time() + 300:
+            return token_info['access_token']
 
-    response = requests.post(token_url, data=data)
-    token_info = response.json()
+        token_url = f"{self.authority}/oauth2/v2.0/token"
+        data = {
+            'client_id': self.client_id,
+            'client_secret': self.client_secret,
+            'grant_type': 'refresh_token',
+            'refresh_token': token_info.get('refresh_token'),
+            'scope': self.scope
+        }
 
-    if 'access_token' not in token_info or 'refresh_token' not in token_info:
-        raise Exception(f"Failed to get tokens: {token_info}")
+        response = requests.post(token_url, data=data)
+        new_token_info = response.json()
 
-    token_info['expires_at'] = time.time() + token_info.get('expires_in', 3600)
-
-    with open(MS_TOKEN_FILE, 'w') as f:
-        json.dump(token_info, f)
-
-    print("Access token saved.")
-    return token_info['access_token']
-
-
-def refresh_ms_token():
-    """
-    Refresh the saved MS access token using the refresh token.
-    """
-    if not os.path.exists(MS_TOKEN_FILE):
+        if 'access_token' in new_token_info and 'refresh_token' in new_token_info:
+            new_token_info['expires_at'] = time.time() + new_token_info.get('expires_in', 3600)
+            with open(self.token_file, 'w') as f:
+                json.dump(new_token_info, f)
+            return new_token_info['access_token']
         return None
 
-    with open(MS_TOKEN_FILE, 'r') as f:
-        token_info = json.load(f)
-
-    if 'refresh_token' not in token_info:
-        return None
-
-    # If token still valid, reuse it
-    if token_info.get('expires_at', 0) > time.time() + 300:
-        print("Using existing access token.")
-        return token_info['access_token']
-
-    # Otherwise, refresh
-    token_url = f"{MS_AUTHORITY}/oauth2/v2.0/token"
-    data = {
-        'client_id': MS_CLIENT_ID,
-        'client_secret': MS_CLIENT_SECRET,
-        'grant_type': 'refresh_token',
-        'refresh_token': token_info['refresh_token'],
-        'scope': MS_SCOPE
-    }
-
-    response = requests.post(token_url, data=data)
-    new_token_info = response.json()
-
-    if 'access_token' not in new_token_info or 'refresh_token' not in new_token_info:
-        return None
-
-    new_token_info['expires_at'] = time.time() + new_token_info.get('expires_in', 3600)
-
-    with open(MS_TOKEN_FILE, 'w') as f:
-        json.dump(new_token_info, f)
-
-    print("Access token refreshed.")
-    return new_token_info['access_token']
-
-
-def get_ms_access_token():
-    """
-    Retrieve a Microsoft access token. Try refresh first, then full auth flow if needed.
-    """
-    token = refresh_ms_token()
-    if token:
-        return token
-
-    print("No valid token found. Launching browser for authentication.")
-    auth_code = get_ms_auth_code()
-    return get_ms_token_from_code(auth_code)
+    def get_access_token(self):
+        token = self._refresh_token()
+        if token:
+            return token
+        print("No valid token found. Launching browser for authentication.")
+        code = self._get_auth_code()
+        return self._get_token_from_code(code)
