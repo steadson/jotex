@@ -13,7 +13,7 @@ import logging
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from modules.access_auth import get_ms_access_token
+from modules.access_auth import MicrosoftAuth
 from modules.logger import setup_logging
 
 load_dotenv()
@@ -27,6 +27,15 @@ CACHE_DIR = os.path.join(os.getcwd(), "data/cache")
 # Ensure directories exist
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 os.makedirs(CACHE_DIR, exist_ok=True)
+
+ms_auth = MicrosoftAuth(
+    client_id=os.getenv("STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_ID"),
+    client_secret=os.getenv("STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_SECRET"),
+    tenant_id=os.getenv("STOCK_SHAREPOINT_EXCEL_FINANCE_TENANT_ID"),
+    redirect_uri=os.getenv("REDIRECT_URI", "http://localhost:8000"),
+    token_file="ms_token.json",
+    scope="Files.Read Files.Read.All Sites.Read.All offline_access"
+)
 
 def get_file_metadata(access_token, drive_id, item_id):
     """
@@ -256,7 +265,7 @@ if __name__ == "__main__":
             exit(1)
         
         # Get access token (will try to use saved token first, only opening browser if needed)
-        access_token = get_ms_access_token()
+        access_token = ms_auth.get_access_token()
         
         # Track total new rows across all files
         total_new_rows = 0

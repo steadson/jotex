@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 # Add parent directory to the path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from modules.access_auth import get_ms_access_token
+from modules.access_auth import MicrosoftAuth
 from modules.logger import setup_logging
 
 # Load environment variables
@@ -30,6 +30,15 @@ UPLOAD_PATHS = {
 # Ensure necessary directories exist
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 os.makedirs(BACKUP_DIR, exist_ok=True)
+
+ms_auth = MicrosoftAuth(
+    client_id=os.getenv("STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_ID"),
+    client_secret=os.getenv("STOCK_SHAREPOINT_EXCEL_FINANCE_CLIENT_SECRET"),
+    tenant_id=os.getenv("STOCK_SHAREPOINT_EXCEL_FINANCE_TENANT_ID"),
+    redirect_uri=os.getenv("REDIRECT_URI", "http://localhost:8000"),
+    token_file="ms_token.json",
+    scope="Files.Read Files.Read.All Sites.Read.All offline_access"
+)
 
 def upload_file(file_path: str, graph_path: str, access_token: str) -> None:
     """Uploads a file to OneDrive and moves it to backup if successful."""
@@ -54,7 +63,7 @@ def upload_file(file_path: str, graph_path: str, access_token: str) -> None:
 
 def main() -> None:
     """Main function to handle file uploads."""
-    access_token = get_ms_access_token()
+    access_token = ms_auth.get_access_token()
 
     for filename in os.listdir(UPLOAD_DIR):
         file_path = os.path.join(UPLOAD_DIR, filename)
