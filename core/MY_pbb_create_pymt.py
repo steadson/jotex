@@ -38,23 +38,24 @@ class PBBWorkflow:
         self.stats = {'processed': 0, 'failed': 0}
 
     def convert_date(self, date_string):
-        from dateutil import parser
         import re
+        from datetime import datetime
         if pd.isna(date_string) or not date_string:
             return None
         try:
             date_str = str(date_string).strip()
             if 'MY (UTC' in date_str:
                 date_str = date_str.split('MY')[0].strip()
-            return parser.parse(date_str).strftime('%Y-%m-%d')
+
+            # Try to parse YYYY-DD-MM format
+            return datetime.strptime(date_str, '%Y-%d-%m').strftime('%Y-%m-%d')
         except:
-            match = re.findall(r'(\d+)[/\-.](\d+)[/\-.](\d+)', date_str)
+            match = re.findall(r'(\d{4})[/-](\d{2})[/-](\d{2})', date_str)
             if match:
-                day, month, year = match[0]
-                if len(year) == 2:
-                    year = '20' + year
+                year, day, month = match[0]
                 return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
             return None
+
 
     def read_csv(self):
         df = pd.read_csv(self.csv_file, quoting=csv.QUOTE_MINIMAL)
