@@ -59,9 +59,11 @@ class PBBWorkflow:
     def read_csv(self):
         df = pd.read_csv(self.csv_file, quoting=csv.QUOTE_MINIMAL)
         df.columns = [col.strip() for col in df.columns]
-        df['STATUS'] = df.get('STATUS', '').astype(str)
-        df['payment_ID'] = df.get('payment_ID', '').astype(str)
-        df['REMARKS'] = df.get('REMARKS', '').astype(str)
+        for col in ['STATUS', 'payment_ID', 'REMARKS']:
+            if col not in df.columns:
+                df[col] = ''
+            df[col] = df[col].astype(str)
+
         df['Posting date'] = df.get('Transaction Date')
         df['FormattedDate'] = df['Transaction Date'].apply(self.convert_date)
 
