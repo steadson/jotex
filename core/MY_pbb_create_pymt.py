@@ -8,7 +8,8 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from modules.access_auth import BusinessCentralAuth
 from modules.business_central import BusinessCentralClient
-from modules.logger import setup_logging
+from utils.logger import setup_logging
+from utils.payment_utils import normalize_columns, clean_numeric, convert_date, build_payment_payload, save_excel
 
 # Load environment variables
 load_dotenv()
@@ -37,56 +38,18 @@ class PBBWorkflow:
         self.journal_id = os.getenv('PBB_JOURNAL_ID')
         self.stats = {'processed': 0, 'failed': 0}
 
-    def convert_date(self, date_string):
-        import re
-        from datetime import datetime
-        if pd.isna(date_string) or not date_string:
-            return None
-        try:
-            date_str = str(date_string).strip()
-            if 'MY (UTC' in date_str:
-                date_str = date_str.split('MY')[0].strip()
-
-            # Try to parse known format YYYY-DD-MM
-            try:
-                return datetime.strptime(date_str, '%Y-%d-%m').strftime('%Y-%m-%d')
-            except ValueError:
-                pass
-
-            # Try to parse DD/M/YYYY or DD/MM/YYYY
-            try:
-                return datetime.strptime(date_str, '%d/%m/%Y').strftime('%Y-%m-%d')
-            except ValueError:
-                pass
-
-            # Fallback: extract using regex for patterns like YYYY-MM-DD
-            match = re.findall(r'(\d{4})[/-](\d{2})[/-](\d{2})', date_str)
-            if match:
-                year, day, month = match[0]
-                return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-
-        except Exception as e:
-            self.logger.warning(f"Date parsing failed for '{date_string}': {e}")
-        return None
+    # Date conversion now uses utils.payment_utils.convert_date
 
 
 
     def read_csv(self):
         df = pd.read_csv(self.csv_file, quoting=csv.QUOTE_MINIMAL)
         df.columns = [col.strip() for col in df.columns]
-        for col in ['STATUS', 'payment_ID', 'REMARKS']:
-            if col not in df.columns:
-                df[col] = ''
-            df[col] = df[col].astype(str)
-
+        df = normalize_columns(df, ['STATUS', 'payment_ID', 'REMARKS'])
         df['Posting date'] = df.get('Transaction Date')
-        df['FormattedDate'] = df['Transaction Date'].apply(self.convert_date)
-
+        df['FormattedDate'] = df['Transaction Date'].apply(convert_date) if 'Transaction Date' in df.columns else ''
         if 'Credit Amount' in df.columns:
-            df['Credit Amount'] = df['Credit Amount'].fillna('').apply(
-                lambda x: str(x).strip().replace('"', '').replace(',', '') if x else '0'
-            )
-
+            df['Credit Amount'] = df['Credit Amount'].apply(clean_numeric)
         self.logger.info(f"CSV loaded with {len(df)} rows.")
         return df
 
@@ -109,7 +72,7 @@ class PBBWorkflow:
                 continue
 
             try:
-                amount = -abs(float(str(row.get('Credit Amount')).strip()))
+                amount = -abs(float(row.get('Credit Amount')))
             except Exception as e:
                 df.at[i, 'REMARKS'] = f"Invalid credit amount: {e}"
                 self.stats['failed'] += 1
@@ -124,15 +87,14 @@ class PBBWorkflow:
             if not description:
                 description = f"Payment from {customer_info.get('customerNumber', 'unknown')}"
 
-            payload = {
-                "journalId": self.journal_id,
-                "journalDisplayName": "PBB",
-                "customerId": customer_info['customerId'],
-                "customerNumber": customer_info['customerNumber'],
-                "postingDate": row['FormattedDate'],
-                "amount": amount,
-                "description": description
-            }
+            payload = build_payment_payload(
+                self.journal_id,
+                "PBB",
+                customer_info,
+                row.get('FormattedDate'),
+                amount,
+                description
+            )
 
             payment_id = bc_client.create_customer_journal_line(payload)
             if payment_id:
@@ -147,9 +109,7 @@ class PBBWorkflow:
         self.save_results(df)
 
     def save_results(self, df):
-        os.makedirs("data/output", exist_ok=True)
-        output_file = os.path.join("data/output", "PBB_2025_updated.xlsx")
-        df.to_excel(output_file, index=False)
+        output_file = save_excel(df, self.csv_file)
         self.logger.info(f"Saved updated Excel to: {output_file}")
         self.logger.info(f"Processed: {self.stats['processed']}, Failed: {self.stats['failed']}")
 

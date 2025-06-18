@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from modules.access_auth import MicrosoftAuth
-from modules.logger import setup_logging
+from utils.logger import setup_logging
 
 # Load environment variables
 load_dotenv()
