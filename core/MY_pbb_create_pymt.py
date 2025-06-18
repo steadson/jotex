@@ -47,14 +47,28 @@ class PBBWorkflow:
             if 'MY (UTC' in date_str:
                 date_str = date_str.split('MY')[0].strip()
 
-            # Try to parse YYYY-DD-MM format
-            return datetime.strptime(date_str, '%Y-%d-%m').strftime('%Y-%m-%d')
-        except:
+            # Try to parse known format YYYY-DD-MM
+            try:
+                return datetime.strptime(date_str, '%Y-%d-%m').strftime('%Y-%m-%d')
+            except ValueError:
+                pass
+
+            # Try to parse DD/M/YYYY or DD/MM/YYYY
+            try:
+                return datetime.strptime(date_str, '%d/%m/%Y').strftime('%Y-%m-%d')
+            except ValueError:
+                pass
+
+            # Fallback: extract using regex for patterns like YYYY-MM-DD
             match = re.findall(r'(\d{4})[/-](\d{2})[/-](\d{2})', date_str)
             if match:
                 year, day, month = match[0]
                 return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-            return None
+
+        except Exception as e:
+            self.logger.warning(f"Date parsing failed for '{date_string}': {e}")
+        return None
+
 
 
     def read_csv(self):
