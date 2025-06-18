@@ -209,13 +209,20 @@ def download_specific_file(access_token, drive_id, item_id, file_name, sheet_nam
     available_sheets = excel_file.sheet_names
     logging.info(f"Available sheets in {file_name}: {available_sheets}")
     
-    # Read the specified sheet
-    if sheet_name in available_sheets:
-        logging.info(f"Reading sheet: {sheet_name}")
-        df = pd.read_excel(excel_data, sheet_name=sheet_name)
-    else:
-        logging.warning(f"Sheet '{sheet_name}' not found. Using first sheet: {available_sheets[0]}")
-        df = pd.read_excel(excel_data, sheet_name=0)  # Use first sheet as fallback
+    try:
+        if sheet_name in available_sheets:
+            logging.info(f"Reading sheet: {sheet_name}")
+            df = pd.read_excel(excel_data, sheet_name=sheet_name)
+        else:
+            logging.warning(f"Sheet '{sheet_name}' not found. Using first sheet: {available_sheets[0]}")
+            df = pd.read_excel(excel_data, sheet_name=0)  # Fallback to first sheet
+    except ValueError as ve:
+        logging.error(f"Failed to parse Excel file '{file_name}', sheet '{sheet_name}': {ve}")
+        return None, 0
+    except Exception as e:
+        logging.error(f"Unexpected error while reading Excel file '{file_name}': {e}")
+        return None, 0
+
     
     # Identify new rows only
     new_rows_df, new_rows_count = identify_new_rows(df, file_name)
@@ -272,18 +279,20 @@ if __name__ == "__main__":
         
         # Download each file
         for file_info in files_to_download:
-            # Extract sheet_name if provided in config
-            sheet_name = file_info.get("sheet_name", None)
-            
-            _, new_rows_count = download_specific_file(
-                access_token,
-                file_info["drive_id"],
-                file_info["item_id"],
-                file_info["name"],
-                sheet_name
-            )
-            total_new_rows += new_rows_count
-            
+            try:
+                sheet_name = file_info.get("sheet_name", None)
+                
+                _, new_rows_count = download_specific_file(
+                    access_token,
+                    file_info["drive_id"],
+                    file_info["item_id"],
+                    file_info["name"],
+                    sheet_name
+                )
+                total_new_rows += new_rows_count
+            except Exception as e:
+                logging.error(f"Skipping file '{file_info.get('name', 'UNKNOWN')}' due to error: {e}")
+
         logging.info(f"\nProcess completed! Downloaded {total_new_rows} new rows across all files.")
         
     except Exception as e:
