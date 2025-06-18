@@ -10,7 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from modules.access_auth import BusinessCentralAuth
 from modules.business_central import BusinessCentralClient
-from modules.logger import setup_logging
+from utils.logger import setup_logging
 
 load_dotenv()
 logger = setup_logging('SG_mbb_create_pymt')
