@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 import pandas as pd
-from datetime import datetime
 from dotenv import load_dotenv
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -10,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modules.access_auth import BusinessCentralAuth
 from modules.business_central import BusinessCentralClient
 from utils.logger import setup_logging
+from utils.payment_utils import normalize_columns, clean_numeric, convert_date, build_payment_payload, save_excel
 
 # Load environment variables
 load_dotenv()
@@ -40,29 +40,14 @@ class FinanceWorkflow:
         self.stats = {'processed': 0, 'failed': 0}
         self.not_transferred_rows = []
 
-    def convert_date(self, date_string):
-        if pd.isna(date_string):
-            return None
-        try:
-            from dateutil import parser
-            if 'MY (UTC' in str(date_string):
-                date_string = str(date_string).split('MY')[0].strip()
-            return parser.parse(str(date_string)).strftime('%Y-%m-%d')
-        except Exception:
-            return None
-
     def read_csv_file(self):
         try:
             df = pd.read_csv(self.csv_file)
             df.columns = [col.strip() for col in df.columns]
-            if 'STATUS' not in df.columns:
-                df['STATUS'] = ''
-            if 'payment_ID' not in df.columns:
-                df['payment_ID'] = ''
-            df['STATUS'] = df['STATUS'].astype(str)
-            df['payment_ID'] = df['payment_ID'].astype(str)
-            df['Credit'] = df['Credit'].fillna('0').astype(str).str.replace(',', '')
-            df['FormattedDate'] = df['Posting date'].apply(self.convert_date)
+            df = normalize_columns(df, ['STATUS', 'payment_ID'])
+            if 'Credit' in df.columns:
+                df['Credit'] = df['Credit'].apply(clean_numeric)
+            df['FormattedDate'] = df['Posting date'].apply(convert_date) if 'Posting date' in df.columns else ''
             return df
         except Exception as e:
             self.logger.error(f"Failed to read CSV: {e}")
@@ -114,15 +99,14 @@ class FinanceWorkflow:
             if not description:
                 description = f"Payment from {customer_info.get('customerNumber', 'unknown')}"
 
-            payload = {
-                "journalId": self.journal_id,
-                "journalDisplayName": "MBB",
-                "customerId": customer_info['customerId'],
-                "customerNumber": customer_info['customerNumber'],
-                "postingDate": posting_date,
-                "amount": amount,
-                "description": description
-            }
+            payload = build_payment_payload(
+                self.journal_id,
+                "MBB",
+                customer_info,
+                posting_date,
+                amount,
+                description
+            )
 
             payment_id = bc_client.create_customer_journal_line(payload)
             if payment_id:
@@ -140,10 +124,7 @@ class FinanceWorkflow:
 
 
     def save_updated_csv(self, df):
-        base_name = os.path.splitext(os.path.basename(self.csv_file))[0]
-        output_file = os.path.join("data/output", f"{base_name}_updated.xlsx")
-        os.makedirs("data/output", exist_ok=True)
-        df.to_excel(output_file, index=False)
+        output_file = save_excel(df, self.csv_file)
         self.logger.info(f"Saved updated Excel: {output_file}")
 
 

@@ -3,7 +3,6 @@ import sys
 import logging
 import pandas as pd
 import csv
-from datetime import datetime
 from dotenv import load_dotenv
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -11,6 +10,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modules.access_auth import BusinessCentralAuth
 from modules.business_central import BusinessCentralClient
 from utils.logger import setup_logging
+from utils.payment_utils import normalize_columns, clean_numeric, convert_date, build_payment_payload, save_excel
 
 load_dotenv()
 logger = setup_logging('SG_mbb_create_pymt')
@@ -30,24 +30,7 @@ bc_client = BusinessCentralClient(
 )
 
 # --- Helper Functions ---
-def clean_credit_value(val):
-    if pd.isna(val) or str(val).strip() == '':
-        return '0'
-    val = str(val).strip().strip('"\'')
-
-    return val.replace(',', '')
-
-def convert_date(date_string):
-    from dateutil import parser
-    if pd.isna(date_string):
-        return None
-    try:
-        if 'MY (UTC' in str(date_string):
-            date_string = str(date_string).split('MY')[0].strip()
-        return parser.parse(date_string).strftime('%Y-%m-%d')
-    except Exception as e:
-        logger.warning(f"Date conversion failed for '{date_string}': {e}")
-        return None
+# Use utils.payment_utils.clean_numeric and convert_date instead of local helpers
 
 # --- Workflow Class ---
 class SGMBBWorkflow:
@@ -62,25 +45,15 @@ class SGMBBWorkflow:
         try:
             df = pd.read_csv(self.csv_file, quoting=csv.QUOTE_MINIMAL)
             df.columns = [col.strip() for col in df.columns]
-
-            # Ensure expected columns exist
-            for col in ['STATUS', 'payment_ID', 'REMARKS']:
-                if col not in df.columns:
-                    df[col] = ''
-                else:
-                    df[col] = df[col].astype(str)
-
+            df = normalize_columns(df, ['STATUS', 'payment_ID', 'REMARKS'])
             if 'Credit' in df.columns:
-                df['Credit'] = df['Credit'].apply(clean_credit_value)
+                df['Credit'] = df['Credit'].apply(clean_numeric)
                 self.logger.info("Processed 'Credit' column successfully")
             else:
                 self.logger.warning("Missing 'Credit' column in CSV")
-
-            df['FormattedDate'] = df['Transaction Date'].apply(convert_date) if 'Transaction Date' in df.columns else None
+            df['FormattedDate'] = df['Transaction Date'].apply(convert_date) if 'Transaction Date' in df.columns else ''
             self.logger.info(f"Loaded {len(df)} rows from CSV")
-
             return df
-
         except Exception as e:
             self.logger.error(f"CSV read failed: {e}")
             raise
@@ -105,7 +78,7 @@ class SGMBBWorkflow:
                     self.stats['failed'] += 1
                     continue
 
-                credit = clean_credit_value(row.get('Credit'))
+                credit = clean_numeric(row.get('Credit'))
                 try:
                     amount = float(credit)
                 except ValueError:
@@ -121,15 +94,14 @@ class SGMBBWorkflow:
 
                 description = str(row.get('Description', f"Payment for {name}")).strip()
 
-                payload = {
-                    "journalId": self.journal_id,
-                    "journalDisplayName": "CRJ-MBB",
-                    "customerId": customer_info['customerId'],
-                    "customerNumber": customer_info['customerNumber'],
-                    "postingDate": posting_date,
-                    "amount": amount,
-                    "description": description
-                }
+                payload = build_payment_payload(
+                    self.journal_id,
+                    "CRJ-MBB",
+                    customer_info,
+                    posting_date,
+                    amount,
+                    description
+                )
 
                 payment_id = bc_client.create_customer_journal_line(payload)
                 if payment_id:
@@ -151,10 +123,7 @@ class SGMBBWorkflow:
 
     def save_results(self, df):
         try:
-            base_name = os.path.splitext(os.path.basename(self.csv_file))[0]
-            output_path = os.path.join("data/output", f"{base_name}_updated.xlsx")
-            os.makedirs("data/output", exist_ok=True)
-            df.to_excel(output_path, index=False)
+            output_path = save_excel(df, self.csv_file)
             self.logger.info(f"Saved results to {output_path}")
         except Exception as e:
             self.logger.error(f"Failed to save results: {e}")

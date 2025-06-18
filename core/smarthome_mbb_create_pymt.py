@@ -2,7 +2,6 @@ import os
 import sys
 import logging
 import pandas as pd
-from datetime import datetime
 from dotenv import load_dotenv
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -10,6 +9,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from modules.access_auth import BusinessCentralAuth
 from modules.business_central import BusinessCentralClient
 from utils.logger import setup_logging
+from utils.payment_utils import normalize_columns, clean_numeric, convert_date, build_payment_payload, save_excel
 
 # Load environment variables
 load_dotenv()
@@ -40,17 +40,7 @@ class SmarthomeFinanceWorkflow:
         self.stats = {'processed': 0, 'failed': 0}
         self.not_transferred_rows = []
 
-    def convert_date(self, date_string):
-        if pd.isna(date_string):
-            return ""
-        try:
-            from dateutil import parser
-            if 'MY (UTC' in str(date_string):
-                date_string = str(date_string).split('MY')[0].strip()
-            return parser.parse(str(date_string)).strftime('%Y-%m-%d')
-        except Exception as e:
-            self.logger.warning(f"Date conversion failed for '{date_string}': {e}")
-            return ""
+    # Date conversion now uses utils.payment_utils.convert_date
 
     def read_csv_file(self):
         try:
@@ -59,22 +49,14 @@ class SmarthomeFinanceWorkflow:
             df.columns = [col.strip() if isinstance(col, str) else col for col in df.columns]
             self.logger.info(f"CSV columns after stripping spaces: {df.columns.tolist()}")
 
-            for col in ['STATUS', 'payment_ID', 'REMARKS']:
-                if col not in df.columns:
-                    df[col] = ''
-                df[col] = df[col].astype(str).fillna('')
-
+            df = normalize_columns(df, ['STATUS', 'payment_ID', 'REMARKS'])
             if 'Credit' in df.columns:
-                def clean_amount(val):
-                    val_str = str(val).strip().strip('"').strip("'").replace(',', '')
-                    return val_str if val_str else '0'
-
-                df['Credit'] = df['Credit'].apply(clean_amount)
+                df['Credit'] = df['Credit'].apply(clean_numeric)
                 self.logger.info("Processed Credit column successfully")
             else:
                 self.logger.warning(f"Credit column not found in CSV. Available columns: {df.columns.tolist()}")
 
-            df['FormattedDate'] = df['Posting date'].apply(self.convert_date) if 'Posting date' in df.columns else ""
+            df['FormattedDate'] = df['Posting date'].apply(convert_date) if 'Posting date' in df.columns else ""
             self.logger.info(f"Successfully read CSV with {len(df)} rows and {len(df.columns)} columns")
             return df
 
@@ -92,7 +74,7 @@ class SmarthomeFinanceWorkflow:
             if not customer_info:
                 return None, 'Customer not found'
 
-            amount_str = str(row.get('Credit', '')).strip().replace(',', '')
+            amount_str = clean_numeric(row.get('Credit', ''))
             if not amount_str or amount_str == '0':
                 return None, 'Empty or zero amount'
 
@@ -103,26 +85,20 @@ class SmarthomeFinanceWorkflow:
 
             formatted_date = row.get('FormattedDate', '').strip()
             if not formatted_date:
-                try:
-                    from dateutil import parser
-                    date_str = str(row.get('Posting date', '')).strip()
-                    formatted_date = parser.parse(date_str).strftime('%Y-%m-%d') if date_str else ''
-                except:
-                    return None, f'Invalid date format: {row.get("Posting date", "")}'
+                return None, f'Invalid date format: {row.get("Posting date", "")}'
 
             description = row.get('DESCRIPTION', '').strip() or customer_info.get('customerName', '')
             if not description:
                 description = f"Payment from {customer_info.get('customerNumber', 'unknown')}"
 
-            payment_data = {
-                "journalId": self.journal_id,
-                "journalDisplayName": "MBB",
-                'customerId': customer_info['customerId'],
-                'customerNumber': customer_info['customerNumber'],
-                'postingDate': formatted_date,
-                'amount': amount,
-                'description': description
-            }
+            payment_data = build_payment_payload(
+                self.journal_id,
+                "MBB",
+                customer_info,
+                formatted_date,
+                amount,
+                description
+            )
 
             payment_id = bc_client.create_customer_journal_line(payment_data)
             return (payment_id, 'Successfully transferred') if payment_id else (None, 'Payment creation failed')
@@ -155,11 +131,7 @@ class SmarthomeFinanceWorkflow:
 
     def save_results(self, df):
         try:
-            base_filename = os.path.basename(self.csv_file)
-            base_name = os.path.splitext(base_filename)[0]
-            excel_updated_file = os.path.join("data/output", f"{base_name}_updated.xlsx")
-            os.makedirs("data/output", exist_ok=True)
-            df.fillna('').to_excel(excel_updated_file, index=False)
+            excel_updated_file = save_excel(df, self.csv_file)
             self.logger.info(f"Saved updated Excel: {excel_updated_file}")
         except Exception as e:
             self.logger.error(f"Error saving updated Excel: {e}")
