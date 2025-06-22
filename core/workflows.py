@@ -5,24 +5,15 @@ This script orchestrates the complete workflow for processing bank transactions
 through a series of steps from downloading data to uploading processed results.
 
 Workflow Sequence:
-1. download_excel_oauth.py - Download transaction data
-2. For each downloaded file (e.g., MBB 2025, PBB 2025, SG MBB, Smarthome MBB), check if the 'CUSTOMER_NAME' column contains any empty values:
-   - If any rows have empty 'CUSTOMER_NAME', retain only those rows for processing.
-   - Skip files with no empty 'CUSTOMER_NAME' entries.
-3. Conditional execution for each file type with valid empty 'CUSTOMER_NAME' rows:
-   - Malaysia MBB:
-     - nlp_parser/MY_mbb_txn_parser_nlp.py — Parse MBB transactions.
-     - MY_mbb_create_pymt.py — Create MBB payments.
-   - Malaysia PBB:
-     - nlp_parser/MY_pbb_txn_parser_nlp.py — Parse PBB transactions.
-     - MY_pbb_create_pymt.py — Create PBB payments.
-   - Singapore MBB:
-     - parser/SG_mbb_txn_parser.py — Parse SG MBB transactions.
-     - SG_mbb_create_pymt.py — Create SG MBB payments.
-   - Smarthome MBB:
-     - parser/smarthome_mbb_txn_parser.py — Parse Smarthome MBB transactions.
-     - smarthome_mbb_create_pymt.py — Create Smarthome MBB payments.
-4. upload_to_onedrive.py - Upload results to OneDrive
+- `core/download_excel_oauth.py`
+    - Depends on the `data/downloads/new_rows` download files filter the rows, if the row "CUSTOMER_NAME" is not empty, remove the row.
+- Pairs run:
+    - `MBB 2025.csv` ⟶ `nlp_parser/MY_mbb_txn_parser_nlp.py` ⟶ `core/MY_mbb_create_pymt.py`
+    - `PBB 2025.csv` ⟶ `nlp_parser/MY_pbb_txn_parser_nlp.py` ⟶ `core/MY_pbb_create_pymt.py`
+    - `JOTEX PTE LTD MAYBANK SG 2025.csv` ⟶ `parser/SG_mbb_txn_parser.py` ⟶ `core/SG_mbb_create_pymt.py`
+    - `Smarthome MBB 2025.csv` ⟶ `parser/smarthome_mbb_txn_parser.py` ⟶ `core/smarthome_mbb_create_pymt.py`
+- After finish all `core/upload_to_onedrive.py`
+- Delete files in `data/downloads/new_rows` and `data/temp` folder
 """
 
 import logging
@@ -31,7 +22,6 @@ import subprocess
 import sys
 from pathlib import Path
 import os
-import pandas as pd
 
 # Add the project root (parent of core/) to sys.path
 sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -43,46 +33,9 @@ import download_excel_oauth, MY_mbb_create_pymt, MY_pbb_create_pymt, SG_mbb_crea
 from nlp_parser import MY_mbb_txn_parser_nlp, MY_pbb_txn_parser_nlp
 from parser import SG_mbb_txn_parser, smarthome_mbb_txn_parser
 
-
-def filter_empty_rows(file_path, key_column="CUSTOMER_NAME"):
-    if not Path(file_path).exists():
-        logging.error(f"File does not exist: {file_path}")
-        return False
-    try:
-        # Read CSV with explicit encoding and handle potential BOM
-        df = pd.read_csv(file_path, encoding='utf-8-sig')
-        logging.info(f"Reading file {file_path} - Found {len(df)} rows")
-        logging.info(f"Columns in file: {df.columns.tolist()}")
-        
-        # Find the exact column name (case-insensitive)
-        matching_columns = [col for col in df.columns if col.strip().upper() == key_column.upper()]
-        if not matching_columns:
-            logging.error(f"Column '{key_column}' not found in file. Available columns: {df.columns.tolist()}")
-            return False
-            
-        actual_column = matching_columns[0]
-        logging.info(f"Using column: '{actual_column}'")
-        
-        # More comprehensive empty value check
-        df_filtered = df[
-            df[actual_column].isna() |  # NaN values
-            (df[actual_column].astype(str).str.strip() == "") |  # Empty strings
-            (df[actual_column].astype(str).str.strip() == "nan") |  # "nan" strings
-            (df[actual_column].astype(str).str.strip() == "None")  # "None" strings
-        ]
-        
-        logging.info(f"Found {len(df_filtered)} rows with empty {key_column}")
-        if not df_filtered.empty:
-            df_filtered.to_csv(file_path, index=False, encoding='utf-8-sig')
-            logging.info(f"Saved filtered data back to {file_path}")
-            return True
-        else:
-            logging.info(f"No empty {key_column} values found in {file_path}")
-    except Exception as e:
-        logging.error(f"Error processing {file_path}: {e}")
-        import traceback
-        logging.error(traceback.format_exc())
-    return False
+# Utilities
+from utils.filter_utils import filter_empty_rows
+from utils.cleanup_utils import delete_workflow_files
 
 
 def run_script(script_func):
@@ -99,23 +52,15 @@ def execute_workflow():
     print("Starting workflow execution")
 
     # Step 1: Download transactions
-    new_rows_downloaded = False  # Add a flag to track if any new rows were downloaded
-
     try:
+        logging.info("Step 1: Downloading transactions...")
         subprocess.run([sys.executable, "core/download_excel_oauth.py"], check=True)
-        # Check if any new rows were downloaded (based on logs or a return value from the download script)
-        new_rows_downloaded = True  # Set this based on actual logic
+        logging.info("Download completed successfully")
     except Exception as e:
         logging.error(f"Download failed: {e}")
         return
 
-    # Skip processing if no new rows were downloaded
-    if not new_rows_downloaded:
-        logging.info("No new rows downloaded. Skipping processing.")
-        print("No new rows downloaded. Skipping processing.")
-        return
-
-    # Step 2 & 3: Conditional processing
+    # Step 2: Process each file pair
     steps = [
         {
             "file": "data/downloads/new_rows/MBB 2025.csv",
@@ -142,19 +87,45 @@ def execute_workflow():
     any_processed = False
 
     for step in steps:
-        if filter_empty_rows(step["file"]):
-            logging.info(f"Processing {step['file']}")
-            print(f"Processing {step['file']}")
-            if run_script(step["parser"]) and run_script(step["payment"]):
-                any_processed = True
+        file_path = step["file"]
+        if Path(file_path).exists():
+            logging.info(f"Processing {file_path}")
+            print(f"Processing {file_path}")
+            
+            # Filter rows (remove rows where CUSTOMER_NAME is NOT empty)
+            if filter_empty_rows(file_path):
+                # Run parser
+                logging.info(f"Running parser for {file_path}")
+                if run_script(step["parser"]):
+                    # Run payment creation
+                    logging.info(f"Running payment creation for {file_path}")
+                    if run_script(step["payment"]):
+                        any_processed = True
+                        logging.info(f"Successfully processed {file_path}")
+                    else:
+                        logging.error(f"Payment creation failed for {file_path}")
+                else:
+                    logging.error(f"Parser failed for {file_path}")
+            else:
+                logging.info(f"No rows to process in {file_path}")
+        else:
+            logging.info(f"File not found: {file_path}")
 
-    # Step 4: Upload if anything was processed
+    # Step 3: Upload to OneDrive if anything was processed
     if any_processed:
+        logging.info("Step 3: Uploading to OneDrive...")
+        print("Uploading to OneDrive...")
         run_script(upload_to_onedrive)
     else:
-        logging.info("No files had rows with empty CUSTOMER_NAME. Nothing to process.")
+        logging.info("No files were processed. Skipping upload.")
 
-    print("Workflow completed.")
+    # Step 4: Clean up files
+    logging.info("Step 4: Cleaning up files...")
+    print("Cleaning up files...")
+    delete_workflow_files()
+
+    logging.info("Workflow completed successfully")
+    print("Workflow completed successfully")
 
 
 def main():
