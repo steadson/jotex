@@ -8,7 +8,7 @@ Workflow Sequence:
 - `core/download_excel_oauth.py`
     - Depends on the `data/downloads/new_rows` download files filter the rows, if the row "CUSTOMER_NAME" is not empty, remove the row.
 - Pairs run:
-    - `MBB 2025.csv` , run `nlp_parser/MY_mbb_txn_parser_nlp.py`. Then `core/MY_mbb_create_pymt.py`
+    - `MBB 2025.csv` ⟶ `nlp_parser/MY_mbb_txn_parser_nlp.py` ⟶ `core/MY_mbb_create_pymt.py`
     - `PBB 2025.csv` ⟶ `nlp_parser/MY_pbb_txn_parser_nlp.py` ⟶ `core/MY_pbb_create_pymt.py`
     - `JOTEX PTE LTD MAYBANK SG 2025.csv` ⟶ `parser/SG_mbb_txn_parser.py` ⟶ `core/SG_mbb_create_pymt.py`
     - `Smarthome MBB 2025.csv` ⟶ `parser/smarthome_mbb_txn_parser.py` ⟶ `core/smarthome_mbb_create_pymt.py`
