@@ -13,7 +13,7 @@ Workflow Sequence:
     - `JOTEX PTE LTD MAYBANK SG 2025.csv` ⟶ `parser/SG_mbb_txn_parser.py` ⟶ `core/SG_mbb_create_pymt.py`
     - `Smarthome MBB 2025.csv` ⟶ `parser/smarthome_mbb_txn_parser.py` ⟶ `core/smarthome_mbb_create_pymt.py`
 - After finish all `core/upload_to_onedrive.py`
-- Delete files in `data/downloads/new_rows` and `data/temp` folder
+- Delete files in `data/downloads/new_rows` and `data/temp` folder. File: `utils/cleanup_utils.py`
 """
 
 import logging
