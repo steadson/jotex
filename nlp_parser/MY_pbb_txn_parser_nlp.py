@@ -122,7 +122,69 @@ def process_tsfr_fund_transaction(txn_desc):
     return process_transaction_generic(txn_desc, 'TSFR FUND CR-ATM/EFT - NO:')
 
 def process_dep_ecp_transaction(txn_desc):
-    return process_transaction_generic(txn_desc, 'DEP-ECP - NO:')
+    """
+    Process DEP-ECP transactions to extract customer name.
+    Format: "DEP-ECP - NO: [number] [IMEPS...] [customer_name] [additional_info]"
+    """
+    parts = txn_desc.split('DEP-ECP - NO:')
+    if len(parts) <= 1:
+        return '', ''
+    
+    after_no = parts[1].strip()
+    
+    # Find the IMEPS pattern and extract what comes after it
+    imeps_match = re.search(r'IMEPS\d+', after_no)
+    if not imeps_match:
+        return '', ''
+    
+    # Get the text after IMEPS pattern
+    after_imeps = after_no[imeps_match.end():].strip()
+    
+    # Extract customer name - it's typically the first few words before additional info
+    # Look for patterns that indicate the end of customer name
+    customer_name = after_imeps
+    
+    # Remove common suffixes and additional info
+    # Remove invoice references
+    customer_name = re.sub(r'\s+(?:INV|INVOICE|INVOICES).*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove payment references
+    customer_name = re.sub(r'\s+(?:PAYMENT|PYMT).*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove JOTEX references
+    customer_name = re.sub(r'\s+JOTEX.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove date patterns like MARCH'25, MAY25, etc.
+    customer_name = re.sub(r'\s+[A-Z]{3,9}\'?\d{2,4}.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove patterns like Psi25043005, OCBPV52927, etc.
+    customer_name = re.sub(r'\s+[A-Z]{2,6}\d{8,}.*$', '', customer_name)
+    
+    # Remove patterns like RHBMARCH'25
+    customer_name = re.sub(r'\s+[A-Z]{2,6}[A-Z]{3,9}\'?\d{2,4}.*$', '', customer_name)
+    
+    # Remove patterns like CIMPAYMENT
+    customer_name = re.sub(r'\s+[A-Z]{3,10}PAYMENT.*$', '', customer_name)
+    
+    # Remove patterns like jotex
+    customer_name = re.sub(r'\s+jotex.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove patterns like 0A at the end
+    customer_name = re.sub(r'\s+0A\s*$', '', customer_name)
+    
+    # Remove everything after "OCB" (including OCB itself)
+    customer_name = re.sub(r'\s+OCB.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove everything after asterisk (*)
+    customer_name = re.sub(r'\*.*$', '', customer_name)
+    
+    # Clean up any remaining extra whitespace
+    customer_name = customer_name.strip()
+    
+    # Keep only uppercase words and words with "&"
+    customer_name = ' '.join(word for word in customer_name.split() if word.isupper() or '&' in word)
+    
+    return customer_name, ''
 
 def process_cheq_transaction(txn_desc):
     cheq_type = 'DEP-LOC CHEQ - NO:' if 'DEP-LOC CHEQ - NO:' in txn_desc else 'DEP-HSE CHEQ - NO:'
