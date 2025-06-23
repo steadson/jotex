@@ -29,6 +29,7 @@ def clean_customer_name(name):
     name = str(name).strip().rstrip('.')
     name = name.replace('SDN.', 'SDN')
     name = name.replace('BHD.', 'BHD')
+    name = name.replace('S/B', '').strip()
     if name.endswith('SB'):
         name = name.replace('SB', '').strip()
     if name.endswith('CUS'):
