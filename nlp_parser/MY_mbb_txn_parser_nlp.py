@@ -192,44 +192,13 @@ def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
         axis=1
     )
     
-    # Create descriptions with additional info
-    df['DESCRIPTION'] = df.apply(
-        lambda row: f"{row['Transaction Ref']} {row['additional_info']} {row['Transaction Description']}", 
-        axis=1
-    )
-    
-    # Clean up descriptions
-    df['DESCRIPTION'] = clean_descriptions(df['DESCRIPTION'])
+    # Create empty descriptions
+    df['DESCRIPTION'] = ''
     
     # Drop temporary columns
     df = df.drop(['original_desc1', 'original_desc', 'raw_customer_name', 'additional_info'], axis=1)
     
     return df
-
-
-def clean_descriptions(descriptions):
-    """
-    Clean and format description text.
-    
-    Args:
-        descriptions (pd.Series): Series of description texts
-        
-    Returns:
-        pd.Series: Cleaned descriptions
-    """
-    # Apply all cleaning operations
-    descriptions = (descriptions
-        .astype(str)
-        .str.replace(r'IBG PAYMENT INTO A/C.*', '', regex=True)  # Remove IBG payment text
-        .str.replace(r'MBB CT-.*', '', regex=True)        # Remove MBB CT text
-        .str.replace(r'-', '', regex=True)                # Remove "-" characters
-        .str.replace(r'\*', '', regex=True)               # Remove "*" characters
-        .str.replace(r'Fund transfer', '', regex=True)    # Remove "Fund transfer" text
-        .str.replace(r'\s+', ' ', regex=True)             # Replace multiple spaces with single space
-        .str.strip()                                      # Strip whitespace
-    )
-    
-    return descriptions
 
 
 def main(input_dir, output_dir):
