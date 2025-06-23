@@ -122,6 +122,7 @@ def basic_clean_customer_name(text):
     cleaned = re.sub(r'SDN\s*BH', 'SDN BH', cleaned)         # Ensure space between SDN and BH
     cleaned = re.sub(r'SDNBH', 'SDN BH', cleaned)            # Fix instances where space was removed
     cleaned = re.sub(r'SDNBHD', 'SDN BHD', cleaned)          # Fix instances where space was removed
+    cleaned = re.sub(r'S/B', '', cleaned)                    # Remove 'S/B'
     cleaned = cleaned.strip()                                # Final whitespace clean
     
     return cleaned
