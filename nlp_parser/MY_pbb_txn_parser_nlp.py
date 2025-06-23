@@ -27,7 +27,6 @@ def clean_customer_name(name):
     if not name:
         return '', ''
     name = str(name).strip().rstrip('.')
-    name = re.sub(r'SDN\.\s*BHD\.?', 'SDN BHD', name)
     name = name.replace('SDN.', 'SDN')
     name = name.replace('BHD.', 'BHD')
     if name.endswith('SB'):
@@ -63,6 +62,22 @@ def clean_customer_name(name):
             name = ' '.join(words[:3])
     return name.strip(), extra_info.strip()
 
+def format_customer_name(name):
+    """
+    Format customer name by replacing special characters and converting to uppercase.
+    
+    Args:
+        name (str): Customer name to format
+        
+    Returns:
+        str: Formatted customer name
+    """
+    if not name:
+        return name
+    name = str(name)
+    name = name.replace('É', 'E')
+    name = name.replace('&amp;', '&')
+    return name.upper()
 
 def clean_description(description):
     if not description:
@@ -156,7 +171,8 @@ def extract_transaction_info(txn_desc, model_data=None):
     if not customer_name and model_data:
         customer_name = predict_customer_name(txn_desc, model_data)
     clean_name, _ = clean_customer_name(customer_name)
-    return clean_name, ''
+    formatted_name = format_customer_name(clean_name)
+    return formatted_name, ''
 
 def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
     if not os.path.exists(file_path):
