@@ -144,20 +144,19 @@ def extract_transaction_info(txn_desc, model_data=None):
     if not txn_desc or pd.isna(txn_desc):
         return '', ''
     txn_desc = str(txn_desc)
-    customer_name, description = '', ''
+    customer_name = ''
     if 'DUITNOW TRSF CR - NO:' in txn_desc:
-        customer_name, description = process_duitnow_transaction(txn_desc)
+        customer_name, _ = process_duitnow_transaction(txn_desc)
     elif 'TSFR FUND CR-ATM/EFT - NO:' in txn_desc:
-        customer_name, description = process_tsfr_fund_transaction(txn_desc)
+        customer_name, _ = process_tsfr_fund_transaction(txn_desc)
     elif 'DEP-ECP - NO:' in txn_desc:
-        customer_name, description = process_dep_ecp_transaction(txn_desc)
+        customer_name, _ = process_dep_ecp_transaction(txn_desc)
     elif 'DEP-LOC CHEQ - NO:' in txn_desc or 'DEP-HSE CHEQ - NO:' in txn_desc:
-        customer_name, description = process_cheq_transaction(txn_desc)
+        customer_name, _ = process_cheq_transaction(txn_desc)
     if not customer_name and model_data:
         customer_name = predict_customer_name(txn_desc, model_data)
-    clean_name, extra_info = clean_customer_name(customer_name)
-    full_desc = f"{extra_info} {description}".strip() if extra_info or description else ''
-    return clean_name, clean_description(full_desc)
+    clean_name, _ = clean_customer_name(customer_name)
+    return clean_name, ''
 
 def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
     if not os.path.exists(file_path):
@@ -174,13 +173,12 @@ def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
     result_df['CUSTOMER_NAME'] = ''
     result_df['DESCRIPTION'] = ''
     customer_count = 0
-    desc_count = 0
     rule_based_count = 0
     model_based_count = 0
     for idx, row in df.iterrows():
         txn_desc = row[txn_desc_col]
         if pd.notna(txn_desc):
-            customer_name, description = extract_transaction_info(txn_desc, model_data)
+            customer_name, _ = extract_transaction_info(txn_desc, model_data)
             if customer_name:
                 result_df.at[idx, 'CUSTOMER_NAME'] = customer_name
                 customer_count += 1
@@ -188,14 +186,11 @@ def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
                     model_based_count += 1
                 else:
                     rule_based_count += 1
-            result_df.at[idx, 'DESCRIPTION'] = description if description else ''
-            if description:
-                desc_count += 1
+            result_df.at[idx, 'DESCRIPTION'] = ''
         else:
             result_df.at[idx, 'DESCRIPTION'] = ''
     print(f"Processed {len(df)} transactions")
     print(f"Extracted {customer_count} customer names (Rule-based: {rule_based_count}, Model-based: {model_based_count})")
-    print(f"Extracted {desc_count} descriptions")
     return result_df
 
 
