@@ -82,14 +82,86 @@ def update_customer_name(customer_path, input_file, similarity_threshold=0.95):
     input_df.to_csv(input_file, index=False)
     print(f"Updated {updated_count} customer names in {input_file}")
 
+def update_customer_name_for_file(processed_file_path):
+    """
+    Automatically determine the correct customer database and update customer names
+    based on the processed file name pattern.
+    
+    Args:
+        processed_file_path (str): Path to the processed CSV file in data/temp/
+    
+    Returns:
+        bool: True if update was successful, False otherwise
+    """
+    processed_file_path = Path(processed_file_path)
+    
+    # Check if file exists
+    if not processed_file_path.exists():
+        print(f"Error: Processed file not found: {processed_file_path}")
+        return False
+    
+    # Determine customer database based on file name
+    file_name = processed_file_path.name.upper()
+    customer_db_mapping = {
+        "MBB_2025_PROCESSED.CSV": "data/customer_db/MY_MBB_CUSTOMER_NAME.csv",
+        "PBB_2025_PROCESSED.CSV": "data/customer_db/MY_PBB_CUSTOMER_NAME.csv", 
+        "SG_MBB_2025_PROCESSED.CSV": "data/customer_db/SG_MBB_customer_name.csv",
+        "SMARTHOME_MBB_2025_PROCESSED.CSV": "data/customer_db/MY_MBB_CUSTOMER_NAME.csv"  # Assuming Smarthome uses MY_MBB database
+    }
+    
+    customer_db_path = None
+    for pattern, db_path in customer_db_mapping.items():
+        if pattern in file_name:
+            customer_db_path = db_path
+            break
+    
+    if customer_db_path is None:
+        print(f"Warning: No customer database mapping found for file: {file_name}")
+        return False
+    
+    customer_db_path = Path(customer_db_path)
+    if not customer_db_path.exists():
+        print(f"Error: Customer database not found: {customer_db_path}")
+        return False
+    
+    print(f"Updating customer names for {processed_file_path} using database {customer_db_path}")
+    
+    try:
+        update_customer_name(
+            customer_path=str(customer_db_path),
+            input_file=str(processed_file_path),
+            similarity_threshold=0.95
+        )
+        return True
+    except Exception as e:
+        print(f"Error updating customer names: {e}")
+        return False
+
+
+def main():
+    """
+    Main function for standalone execution - processes all available files
+    """
+    temp_dir = Path("data/temp")
+    if not temp_dir.exists():
+        print("Error: data/temp directory not found")
+        return
+    
+    # Look for processed files in temp directory
+    processed_files = [
+        temp_dir / "MBB_2025_processed.csv",
+        temp_dir / "PBB_2025_processed.csv", 
+        temp_dir / "SG_MBB_2025_processed.csv",
+        temp_dir / "Smarthome_MBB_2025_processed.csv"
+    ]
+    
+    for file_path in processed_files:
+        if file_path.exists():
+            print(f"\nProcessing: {file_path}")
+            update_customer_name_for_file(file_path)
+        else:
+            print(f"File not found: {file_path}")
+
+
 if __name__ == "__main__":
-    update_customer_name(
-        # customer_path=Path("data/customer_db/MY_PBB_customer_name.csv"),
-        # input_file=Path("data/temp/PBB_2025_processed.csv")
-
-        customer_path=Path("data/customer_db/MY_MBB_customer_name.csv"),
-        input_file=Path("data/temp/MBB_2025_processed.csv")
-
-        # customer_path=Path("data/customer_db/SG_MBB_customer_name.csv"),
-        # input_file=Path("data/temp/SG_MBB_2025_processed.csv")
-    )
+    main()

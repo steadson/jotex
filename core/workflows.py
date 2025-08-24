@@ -8,10 +8,10 @@ Workflow Sequence:
 - `core/download_excel_oauth.py`
     - Depends on the `data/downloads/new_rows` download files filter the rows, if the row "CUSTOMER_NAME" is not empty, remove the row.
 - Pairs run:
-    - `MBB 2025.csv` ⟶ `nlp_parser/MY_mbb_txn_parser_nlp.py` ⟶ `core/MY_mbb_create_pymt.py`
-    - `PBB 2025.csv` ⟶ `nlp_parser/MY_pbb_txn_parser_nlp.py` ⟶ `core/MY_pbb_create_pymt.py`
-    - `JOTEX PTE LTD MAYBANK SG 2025.csv` ⟶ `parser/SG_mbb_txn_parser.py` ⟶ `core/SG_mbb_create_pymt.py`
-    - `Smarthome MBB 2025.csv` ⟶ `parser/smarthome_mbb_txn_parser.py` ⟶ `core/smarthome_mbb_create_pymt.py`
+    - `MBB 2025.csv` ⟶ `parser/MY_mbb_txn_parser.py` ⟶ `utils/update_customer_name.py` ⟶ `core/MY_mbb_create_pymt.py`
+    - `PBB 2025.csv` ⟶ `parser/MY_pbb_txn_parser.py` ⟶ `utils/update_customer_name.py` ⟶ `core/MY_pbb_create_pymt.py`
+    - `JOTEX PTE LTD MAYBANK SG 2025.csv` ⟶ `parser/SG_mbb_txn_parser.py` ⟶ `utils/update_customer_name.py` ⟶ `core/SG_mbb_create_pymt.py`
+    - `Smarthome MBB 2025.csv` ⟶ `parser/smarthome_mbb_txn_parser.py` ⟶ `utils/update_customer_name.py` ⟶ `core/smarthome_mbb_create_pymt.py`
 - After finish all `core/upload_to_onedrive.py`
 - Delete files in `data/downloads/new_rows` and `data/temp` folder. File: `utils/cleanup_utils.py`
 """
@@ -30,12 +30,13 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 import download_excel_oauth, MY_mbb_create_pymt, MY_pbb_create_pymt, SG_mbb_create_pymt, smarthome_mbb_create_pymt, upload_to_onedrive
 
 # Parsers
-from parser import MY_pbb_txn_parser_nlp
-from parser import MY_mbb_txn_parser_nlp, SG_mbb_txn_parser, smarthome_mbb_txn_parser
+from parser import MY_mbb_txn_parser, MY_pbb_txn_parser
+from parser import SG_mbb_txn_parser, smarthome_mbb_txn_parser
 
 # Utilities
 from utils.filter_utils import filter_empty_rows
 from utils.cleanup_utils import delete_workflow_files
+from utils.update_customer_name import update_customer_name_for_file
 
 
 def run_script(script_func):
@@ -64,22 +65,26 @@ def execute_workflow():
     steps = [
         {
             "file": "data/downloads/new_rows/MBB 2025.csv",
-            "parser": MY_mbb_txn_parser_nlp,
+            "parser": MY_mbb_txn_parser,
+            "processed_file": "data/temp/MBB_2025_processed.csv",
             "payment": MY_mbb_create_pymt
         },
         {
             "file": "data/downloads/new_rows/PBB 2025.csv",
-            "parser": MY_pbb_txn_parser_nlp,
+            "parser": MY_pbb_txn_parser,
+            "processed_file": "data/temp/PBB_2025_processed.csv",
             "payment": MY_pbb_create_pymt
         },
         {
             "file": "data/downloads/new_rows/JOTEX PTE LTD MAYBANK SG 2025.csv",
             "parser": SG_mbb_txn_parser,
+            "processed_file": "data/temp/SG_MBB_2025_processed.csv",
             "payment": SG_mbb_create_pymt
         },
         {
             "file": "data/downloads/new_rows/Smarthome MBB 2025.csv",
             "parser": smarthome_mbb_txn_parser,
+            "processed_file": "data/temp/Smarthome_MBB_2025_processed.csv",
             "payment": smarthome_mbb_create_pymt
         }
     ]
@@ -97,6 +102,17 @@ def execute_workflow():
                 # Run parser
                 logging.info(f"Running parser for {file_path}")
                 if run_script(step["parser"]):
+                    # Update customer names using customer database
+                    processed_file = step["processed_file"]
+                    logging.info(f"Updating customer names for {processed_file}")
+                    if Path(processed_file).exists():
+                        if update_customer_name_for_file(processed_file):
+                            logging.info(f"Customer names updated successfully for {processed_file}")
+                        else:
+                            logging.warning(f"Customer name update failed for {processed_file}")
+                    else:
+                        logging.warning(f"Processed file not found: {processed_file}")
+                    
                     # Run payment creation
                     logging.info(f"Running payment creation for {file_path}")
                     if run_script(step["payment"]):
