@@ -9,16 +9,16 @@ def similarity(a, b):
     """
     return SequenceMatcher(None, a.lower(), b.lower()).ratio()
 
-def update_customer_name(customer_path, input_file, similarity_threshold=0.6):
+def update_customer_name(customer_path, input_file, similarity_threshold=0.95):
     """
-    Update company names in input file by matching customer names against customer database.
+    Update customer names in input file by matching against customer database.
     Matches CUSTOMER_NAME from input file against SPECIAL NAME BANK IN column from customer database.
-    When there's a match, replaces COMPANY_NAME in input file with CUSTOMER NAME from customer database.
+    When there's a match, replaces CUSTOMER_NAME in input file with CUSTOMER NAME from customer database.
     
     Args:
         customer_path (str): Path to customer database CSV file
         input_file (str): Path to input CSV file to update
-        similarity_threshold (float): Minimum similarity ratio for matching (0.0 to 1.0)
+        similarity_threshold (float): Minimum similarity ratio for matching (0.0 to 1.0), default 0.85 for near-exact matches
     """
     customer_df = pd.read_csv(customer_path)
     input_df = pd.read_csv(input_file)
@@ -28,8 +28,8 @@ def update_customer_name(customer_path, input_file, similarity_threshold=0.6):
         print("Error: 'SPECIAL NAME BANK IN' column not found in customer database")
         return
     
-    if "COMPANY NAME" not in customer_df.columns:
-        print("Error: 'COMPANY NAME' column not found in customer database")
+    if "CUSTOMER NAME" not in customer_df.columns:
+        print("Error: 'CUSTOMER NAME' column not found in customer database")
         return
     
     if "CUSTOMER_NAME" not in input_df.columns:
@@ -65,26 +65,31 @@ def update_customer_name(customer_path, input_file, similarity_threshold=0.6):
                 best_similarity = sim_ratio
                 best_match = customer_row
         
-        # If we found a good match, update the company name
+        # If we found a good match, update the customer name
         if best_match is not None:
-            company_name = str(best_match["COMPANY NAME"]).strip()
-            original_company_name = str(row["CUSTOMER_NAME"]).strip()
+            new_customer_name = str(best_match["CUSTOMER NAME"]).strip()
+            original_customer_name = str(row["CUSTOMER_NAME"]).strip()
             
-            # Update the company name in input dataframe
-            input_df.at[index, "COMPANY_NAME"] = company_name
+            # Update the customer name in input dataframe
+            input_df.at[index, "CUSTOMER_NAME"] = new_customer_name
             updated_count += 1
             
-            print(f"Updated: Customer '{input_customer_name}' (similarity: {best_similarity:.2f})")
-            print(f"  Company: '{original_company_name}' -> '{company_name}'")
-            print(f"  Matched with: '{best_match['SPECIAL NAME BANK IN']}'")
+            print(f"Updated: '{original_customer_name}' -> '{new_customer_name}' (similarity: {best_similarity:.2f})")
+            print(f"  Matched with database entry: '{best_match['SPECIAL NAME BANK IN']}'")
             print()
     
     # Save the updated dataframe
     input_df.to_csv(input_file, index=False)
-    print(f"Updated {updated_count} company names in {input_file}")
+    print(f"Updated {updated_count} customer names in {input_file}")
 
 if __name__ == "__main__":
     update_customer_name(
-        customer_path=Path("data/customer_db/MY_MBB_PBB_customer_name.csv"),
+        # customer_path=Path("data/customer_db/MY_PBB_customer_name.csv"),
+        # input_file=Path("data/temp/PBB_2025_processed.csv")
+
+        customer_path=Path("data/customer_db/MY_MBB_customer_name.csv"),
         input_file=Path("data/temp/MBB_2025_processed.csv")
+
+        # customer_path=Path("data/customer_db/SG_MBB_customer_name.csv"),
+        # input_file=Path("data/temp/SG_MBB_2025_processed.csv")
     )

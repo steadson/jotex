@@ -1,6 +1,9 @@
 import os
 import pandas as pd
 from dateutil import parser
+import re
+from datetime import datetime
+from .date_utils import convert_date
 
 def normalize_columns(df, required_cols):
     """Ensure required columns exist and are string type."""
@@ -15,44 +18,6 @@ def clean_numeric(val):
     if pd.isna(val) or str(val).strip() == '':
         return '0'
     return str(val).strip().strip('"\'').replace(',', '')
-
-import re
-from datetime import datetime
-
-def convert_date(date_string):
-    """
-    Parse various date formats to YYYY-MM-DD, return '' if invalid.
-    Handles:
-    - 'YYYY-DD-MM'
-    - 'DD/MM/YYYY'
-    - 'YYYY-MM-DD'
-    - Removes 'MY (UTC...' suffix if present.
-    """
-    if pd.isna(date_string) or not str(date_string).strip():
-        return ''
-    try:
-        s = str(date_string).strip()
-        if 'MY (UTC' in s:
-            s = s.split('MY')[0].strip()
-        # Try known format YYYY-DD-MM
-        try:
-            return datetime.strptime(s, '%Y-%d-%m').strftime('%Y-%m-%d')
-        except ValueError:
-            pass
-        # Try DD/MM/YYYY
-        try:
-            return datetime.strptime(s, '%d/%m/%Y').strftime('%Y-%m-%d')
-        except ValueError:
-            pass
-        # Fallback: regex for YYYY-MM-DD or YYYY/MM/DD
-        match = re.findall(r'(\d{4})[/-](\d{2})[/-](\d{2})', s)
-        if match:
-            year, day, month = match[0]
-            return f"{year}-{month.zfill(2)}-{day.zfill(2)}"
-        # Last fallback: dateutil parser
-        return parser.parse(s).strftime('%Y-%m-%d')
-    except Exception:
-        return ''
 
 def build_payment_payload(journal_id, journal_display_name, customer_info, posting_date, amount, description):
     """Builds the payment payload for BusinessCentralClient."""
