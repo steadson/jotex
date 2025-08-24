@@ -2,8 +2,41 @@ import re
 import pandas as pd
 from datetime import datetime
 from dateutil import parser
+import json
+from pathlib import Path
 
-def convert_date(date_string, expected_format=None, month_value=8):
+def get_current_month_from_config():
+    """
+    Automatically detect the current month from files_config.json
+    Returns the month number (1-12) based on the sheet_name in config
+    """
+    try:
+        config_path = Path(__file__).parent.parent / "config" / "files_config.json"
+        if config_path.exists():
+            with open(config_path, 'r') as f:
+                config = json.load(f)
+            
+            # Get the first file's sheet_name to determine month
+            if config.get("files_to_download") and len(config["files_to_download"]) > 0:
+                sheet_name = config["files_to_download"][0].get("sheet_name", "")
+                
+                # Parse month names to numbers
+                month_mapping = {
+                    "Jan": 1, "Feb": 2, "Mar": 3, "Apr": 4, "May": 5, "Jun": 6,
+                    "Jul": 7, "Aug": 8, "Sep": 9, "Oct": 10, "Nov": 11, "Dec": 12
+                }
+                
+                for month_name, month_num in month_mapping.items():
+                    if month_name in sheet_name:
+                        return month_num
+                        
+        # Fallback to current month if config parsing fails
+        return datetime.now().month
+    except Exception:
+        # Fallback to current month if any error occurs
+        return datetime.now().month
+
+def convert_date(date_string, expected_format=None, month_value=None):
     """
     Parse various date formats to YYYY-MM-DD, return '' if invalid.
     Handles:
@@ -16,8 +49,12 @@ def convert_date(date_string, expected_format=None, month_value=8):
     Args:
         date_string: The date string to convert
         expected_format: Optional hint - 'YYYY-DD-MM', 'YYYY-MM-DD', or None for auto-detect
-        month_value: Optional - actual month number (1-12). Function will determine format based on where this value appears
+        month_value: Optional - actual month number (1-12). If None, automatically detected from config
     """
+    # Auto-detect month from config if not specified
+    if month_value is None:
+        month_value = get_current_month_from_config()
+    
     if pd.isna(date_string) or not str(date_string).strip():
         return ''
     try:
@@ -135,4 +172,9 @@ def convert_date(date_string, expected_format=None, month_value=8):
         # Last fallback: dateutil parser
         return parser.parse(s).strftime('%Y-%m-%d')
     except Exception:
-        return '' 
+        return ''
+
+# Convenience function to get current month for debugging
+def get_current_month():
+    """Get the current month number (1-12) being used for date parsing"""
+    return get_current_month_from_config() 

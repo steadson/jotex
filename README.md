@@ -299,6 +299,32 @@ python core/SG_mbb_create_pymt.py --verbose
 python core/smarthome_mbb_create_pymt.py --verbose
 ```
 
+### Sheet Name Configuration Issues
+
+If you encounter errors related to sheet names or month detection:
+
+1. **Verify sheet name format** in `config/files_config.json`:
+
+   - Must be exactly `"MMM'YY"` format (e.g., "Aug'25")
+   - Month must be 3-letter abbreviation with first letter capitalized
+   - Year must be 2-digit with apostrophe
+
+2. **Check Excel file sheet names**:
+
+   - Open your Excel files and verify the actual sheet names
+   - Ensure they match exactly with what's in your config file
+
+3. **Test month detection**:
+
+```bash
+python utils/month_config.py  # Shows current month being used
+```
+
+4. **Common solutions**:
+   - Use the month config utility: `python utils/month_config.py Sep`
+   - Manually edit config file to match Excel sheet names exactly
+   - Ensure consistent formatting across all files
+
 ## Logging
 
 All logs are stored in the `logs/` directory with timestamps. To increase logging verbosity:
@@ -310,6 +336,29 @@ set LOG_LEVEL=DEBUG     # On Windows CMD
 $env:LOG_LEVEL="DEBUG"  # On Windows PowerShell
 
 # Then run the workflow or individual script
+```
+
+## Date Utilities
+
+The `utils/date_utils.py` module provides intelligent date parsing that automatically detects the correct date format based on your month configuration:
+
+### Features:
+
+- **Automatic Month Detection**: Reads month from `config/files_config.json`
+- **Smart Format Detection**: Handles YYYY-MM-DD, YYYY-DD-MM, DD/MM/YYYY, MM/DD/YYYY
+- **Fallback Parsing**: Uses dateutil for complex date strings
+- **UTC Suffix Removal**: Automatically removes "MY (UTC..." suffixes
+
+### Usage:
+
+```python
+from utils.date_utils import convert_date, get_current_month
+
+# Convert date (automatically uses month from config)
+date = convert_date("2025-15-08")  # Returns "2025-08-15"
+
+# Get current month being used
+current_month = get_current_month()  # Returns 8 for August
 ```
 
 ## Testing
@@ -332,6 +381,99 @@ python tests/test_filter_empty_rows.py
 # Test date utilities
 python tests/test_date_utils.py
 ```
+
+## Month Configuration
+
+The system automatically detects the month for date parsing from your `config/files_config.json` file. This makes it easy to switch between months without editing code.
+
+**⚠️ Important Note:** Currently, the sheet names in `config/files_config.json` need to be manually updated when you receive new Excel files with different month sheets. The system cannot automatically detect the actual sheet names from your Excel files.
+
+### Current Month Detection:
+
+- The system reads the `sheet_name` field from your config (e.g., "Aug'25")
+- Automatically converts month names to numbers (Aug → 8)
+- Uses this for intelligent date format detection in `utils/date_utils.py`
+
+### Sheet Name Format Requirements:
+
+The `sheet_name` field must follow this exact format:
+
+- **Month**: 3-letter abbreviation (Jan, Feb, Mar, Apr, May, Jun, Jul, Aug, Sep, Oct, Nov, Dec)
+- **Year**: 2-digit year with apostrophe (e.g., '25 for 2025)
+- **Format**: `"MMM'YY"` (e.g., "Aug'25", "Sep'25", "Oct'25")
+
+**Examples of valid sheet names:**
+
+- `"Aug'25"` ✅ (August 2025)
+- `"Sep'25"` ✅ (September 2025)
+- `"Oct'25"` ✅ (October 2025)
+- `"Jan'26"` ✅ (January 2026)
+
+**⚠️ Common mistakes to avoid:**
+
+- `"August 25"` ❌ (full month name)
+- `"Aug 25"` ❌ (missing apostrophe)
+- `"Aug'2025"` ❌ (4-digit year)
+- `"aug'25"` ❌ (lowercase month)
+
+### Easy Month Changes:
+
+**Change to September:**
+
+```bash
+python utils/month_config.py Sep
+```
+
+**Change to October:**
+
+```bash
+python utils/month_config.py 10
+```
+
+**Change to specific month and year:**
+
+```bash
+python utils/month_config.py Sep 26  # September 2026
+```
+
+**View current configuration:**
+
+```bash
+python utils/month_config.py
+```
+
+### What Happens:
+
+1. Updates all sheet names in `config/files_config.json`
+2. `utils/date_utils.py` automatically uses the new month
+3. No need to edit Python files manually
+4. All date parsing functions work with the new month
+
+### Manual Configuration Updates:
+
+When you receive new Excel files with different month sheets, you need to manually update the `sheet_name` fields in `config/files_config.json`:
+
+**Option 1: Use the month config utility (Recommended)**
+
+```bash
+python utils/month_config.py Sep  # For September
+python utils/month_config.py Oct  # For October
+```
+
+**Option 2: Edit config file manually**
+
+```json
+{
+  "files_to_download": [
+    {
+      "name": "MBB 2025.xlsx",
+      "sheet_name": "Sep'25"  # Change this to match your Excel sheet
+    }
+  ]
+}
+```
+
+**⚠️ Important:** Always ensure the sheet name exactly matches the actual sheet name in your Excel file, including the exact format (MMM'YY).
 
 ## Customer Name Update Feature
 
