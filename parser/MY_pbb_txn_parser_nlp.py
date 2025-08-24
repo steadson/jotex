@@ -27,9 +27,9 @@ def clean_customer_name(name):
     if not name:
         return '', ''
     name = str(name).strip().rstrip('.')
-    name = re.sub(r'SDN\.\s*BHD\.?', 'SDN BHD', name)
     name = name.replace('SDN.', 'SDN')
     name = name.replace('BHD.', 'BHD')
+    name = name.replace('S/B', '').strip()
     if name.endswith('SB'):
         name = name.replace('SB', '').strip()
     if name.endswith('CUS'):
@@ -63,6 +63,22 @@ def clean_customer_name(name):
             name = ' '.join(words[:3])
     return name.strip(), extra_info.strip()
 
+def format_customer_name(name):
+    """
+    Format customer name by replacing special characters and converting to uppercase.
+    
+    Args:
+        name (str): Customer name to format
+        
+    Returns:
+        str: Formatted customer name
+    """
+    if not name:
+        return name
+    name = str(name)
+    name = name.replace('É', 'E')
+    name = name.replace('&amp;', '&')
+    return name.upper()
 
 def clean_description(description):
     if not description:
@@ -106,7 +122,69 @@ def process_tsfr_fund_transaction(txn_desc):
     return process_transaction_generic(txn_desc, 'TSFR FUND CR-ATM/EFT - NO:')
 
 def process_dep_ecp_transaction(txn_desc):
-    return process_transaction_generic(txn_desc, 'DEP-ECP - NO:')
+    """
+    Process DEP-ECP transactions to extract customer name.
+    Format: "DEP-ECP - NO: [number] [IMEPS...] [customer_name] [additional_info]"
+    """
+    parts = txn_desc.split('DEP-ECP - NO:')
+    if len(parts) <= 1:
+        return '', ''
+    
+    after_no = parts[1].strip()
+    
+    # Find the IMEPS pattern and extract what comes after it
+    imeps_match = re.search(r'IMEPS\d+', after_no)
+    if not imeps_match:
+        return '', ''
+    
+    # Get the text after IMEPS pattern
+    after_imeps = after_no[imeps_match.end():].strip()
+    
+    # Extract customer name - it's typically the first few words before additional info
+    # Look for patterns that indicate the end of customer name
+    customer_name = after_imeps
+    
+    # Remove common suffixes and additional info
+    # Remove invoice references
+    customer_name = re.sub(r'\s+(?:INV|INVOICE|INVOICES).*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove payment references
+    customer_name = re.sub(r'\s+(?:PAYMENT|PYMT).*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove JOTEX references
+    customer_name = re.sub(r'\s+JOTEX.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove date patterns like MARCH'25, MAY25, etc.
+    customer_name = re.sub(r'\s+[A-Z]{3,9}\'?\d{2,4}.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove patterns like Psi25043005, OCBPV52927, etc.
+    customer_name = re.sub(r'\s+[A-Z]{2,6}\d{8,}.*$', '', customer_name)
+    
+    # Remove patterns like RHBMARCH'25
+    customer_name = re.sub(r'\s+[A-Z]{2,6}[A-Z]{3,9}\'?\d{2,4}.*$', '', customer_name)
+    
+    # Remove patterns like CIMPAYMENT
+    customer_name = re.sub(r'\s+[A-Z]{3,10}PAYMENT.*$', '', customer_name)
+    
+    # Remove patterns like jotex
+    customer_name = re.sub(r'\s+jotex.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove patterns like 0A at the end
+    customer_name = re.sub(r'\s+0A\s*$', '', customer_name)
+    
+    # Remove everything after "OCB" (including OCB itself)
+    customer_name = re.sub(r'\s+OCB.*$', '', customer_name, flags=re.IGNORECASE)
+    
+    # Remove everything after asterisk (*)
+    customer_name = re.sub(r'\*.*$', '', customer_name)
+    
+    # Clean up any remaining extra whitespace
+    customer_name = customer_name.strip()
+    
+    # Keep only uppercase words and words with "&"
+    customer_name = ' '.join(word for word in customer_name.split() if word.isupper() or '&' in word)
+    
+    return customer_name, ''
 
 def process_cheq_transaction(txn_desc):
     cheq_type = 'DEP-LOC CHEQ - NO:' if 'DEP-LOC CHEQ - NO:' in txn_desc else 'DEP-HSE CHEQ - NO:'
@@ -144,20 +222,20 @@ def extract_transaction_info(txn_desc, model_data=None):
     if not txn_desc or pd.isna(txn_desc):
         return '', ''
     txn_desc = str(txn_desc)
-    customer_name, description = '', ''
+    customer_name = ''
     if 'DUITNOW TRSF CR - NO:' in txn_desc:
-        customer_name, description = process_duitnow_transaction(txn_desc)
+        customer_name, _ = process_duitnow_transaction(txn_desc)
     elif 'TSFR FUND CR-ATM/EFT - NO:' in txn_desc:
-        customer_name, description = process_tsfr_fund_transaction(txn_desc)
+        customer_name, _ = process_tsfr_fund_transaction(txn_desc)
     elif 'DEP-ECP - NO:' in txn_desc:
-        customer_name, description = process_dep_ecp_transaction(txn_desc)
+        customer_name, _ = process_dep_ecp_transaction(txn_desc)
     elif 'DEP-LOC CHEQ - NO:' in txn_desc or 'DEP-HSE CHEQ - NO:' in txn_desc:
-        customer_name, description = process_cheq_transaction(txn_desc)
+        customer_name, _ = process_cheq_transaction(txn_desc)
     if not customer_name and model_data:
         customer_name = predict_customer_name(txn_desc, model_data)
-    clean_name, extra_info = clean_customer_name(customer_name)
-    full_desc = f"{extra_info} {description}".strip() if extra_info or description else ''
-    return clean_name, clean_description(full_desc)
+    clean_name, _ = clean_customer_name(customer_name)
+    formatted_name = format_customer_name(clean_name)
+    return formatted_name, ''
 
 def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
     if not os.path.exists(file_path):
@@ -174,13 +252,12 @@ def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
     result_df['CUSTOMER_NAME'] = ''
     result_df['DESCRIPTION'] = ''
     customer_count = 0
-    desc_count = 0
     rule_based_count = 0
     model_based_count = 0
     for idx, row in df.iterrows():
         txn_desc = row[txn_desc_col]
         if pd.notna(txn_desc):
-            customer_name, description = extract_transaction_info(txn_desc, model_data)
+            customer_name, _ = extract_transaction_info(txn_desc, model_data)
             if customer_name:
                 result_df.at[idx, 'CUSTOMER_NAME'] = customer_name
                 customer_count += 1
@@ -188,14 +265,11 @@ def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
                     model_based_count += 1
                 else:
                     rule_based_count += 1
-            result_df.at[idx, 'DESCRIPTION'] = description if description else ''
-            if description:
-                desc_count += 1
+            result_df.at[idx, 'DESCRIPTION'] = ''
         else:
             result_df.at[idx, 'DESCRIPTION'] = ''
     print(f"Processed {len(df)} transactions")
     print(f"Extracted {customer_count} customer names (Rule-based: {rule_based_count}, Model-based: {model_based_count})")
-    print(f"Extracted {desc_count} descriptions")
     return result_df
 
 

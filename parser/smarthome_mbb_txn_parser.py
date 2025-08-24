@@ -93,8 +93,8 @@ def parse_smarthome_transactions(input_csv_path, output_csv_path):
     # Extract CUSTOMER_NAME
     df['CUSTOMER_NAME'] = df.apply(extract_customer_name, axis=1)
     
-    # For DESCRIPTION, just use the Transaction Ref as a placeholder
-    df['DESCRIPTION'] = df['Transaction Ref']
+    # For DESCRIPTION, leave it empty
+    df['DESCRIPTION'] = ''
     
     # Filter out empty rows
     df = df[df['Transaction Description'].notna() | df['Transaction Description.1'].notna() | df['Transaction Ref'].notna()]

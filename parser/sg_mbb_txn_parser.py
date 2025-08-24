@@ -301,7 +301,6 @@ def process_transactions(input_file, output_file):
         
         # Process each row
         customer_count = 0
-        desc_count = 0
         total_rows = 0
         
         for index, row in df.iterrows():
@@ -309,24 +308,21 @@ def process_transactions(input_file, output_file):
             
             if txn_desc and not pd.isna(txn_desc):
                 total_rows += 1
-                # Extract customer name and description
-                customer_name, description = extract_transaction_info(txn_desc)
+                # Extract customer name only (ignore description)
+                customer_name, _ = extract_transaction_info(txn_desc)
                 
                 # Update DataFrame cells
                 if customer_name:
                     df.at[index, "CUSTOMER_NAME"] = customer_name
                     customer_count += 1
                 
-                if description:
-                    df.at[index, "DESCRIPTION"] = description
-                    desc_count += 1
+                # DESCRIPTION column remains empty
         
         # Save the DataFrame to CSV
         df.to_csv(output_file, index=False)
         
         print(f"Processed {total_rows} transactions")
         print(f"Extracted {customer_count} customer names")
-        print(f"Extracted {desc_count} descriptions")
         print(f"Saved to {output_file}")
         
         return True

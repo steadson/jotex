@@ -28,12 +28,14 @@ def predict_clean_name(raw_name, model_data, min_confidence=0.5, fuzzy_threshold
         
     # Try exact match first (case insensitive)
     if raw_name.lower() in model_data['reference_dict']:
-        return model_data['reference_dict'][raw_name.lower()]
+        result = model_data['reference_dict'][raw_name.lower()]
+        return format_customer_name(result)
     
     # Try fuzzy matching before using the classifier
     best_match, score = process.extractOne(raw_name.lower(), model_data['training_examples'])
     if score >= fuzzy_threshold:
-        return model_data['reference_dict'][best_match]
+        result = model_data['reference_dict'][best_match]
+        return format_customer_name(result)
     
     # Use the classifier if no good fuzzy match
     X = model_data['vectorizer'].transform([raw_name])
@@ -43,10 +45,11 @@ def predict_clean_name(raw_name, model_data, min_confidence=0.5, fuzzy_threshold
     max_prob = pred_proba.max()
     if max_prob >= min_confidence:
         pred_class = model_data['classifier'].predict(X)[0]
-        return pred_class
+        return format_customer_name(pred_class)
     
     # Return basic cleaned version if confidence is too low
-    return basic_clean_customer_name(raw_name)
+    result = basic_clean_customer_name(raw_name)
+    return format_customer_name(result)
 
 
 def extract_additional_info(raw_name, clean_name):
@@ -119,9 +122,28 @@ def basic_clean_customer_name(text):
     cleaned = re.sub(r'SDN\s*BH', 'SDN BH', cleaned)         # Ensure space between SDN and BH
     cleaned = re.sub(r'SDNBH', 'SDN BH', cleaned)            # Fix instances where space was removed
     cleaned = re.sub(r'SDNBHD', 'SDN BHD', cleaned)          # Fix instances where space was removed
+    cleaned = re.sub(r'S/B', '', cleaned)                    # Remove 'S/B'
     cleaned = cleaned.strip()                                # Final whitespace clean
     
     return cleaned
+
+
+def format_customer_name(name):
+    """
+    Format customer name by replacing special characters and converting to uppercase.
+    
+    Args:
+        name (str): Customer name to format
+        
+    Returns:
+        str: Formatted customer name
+    """
+    if not name:
+        return name
+    name = str(name)
+    name = name.replace('É', 'E')
+    name = name.replace('&amp;', '&')
+    return name.upper()
 
 
 def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
@@ -184,7 +206,9 @@ def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
     else:
         # Use basic cleaning if no model
         print("Using basic cleaning for customer names")
-        df['CUSTOMER_NAME'] = df['raw_customer_name'].apply(basic_clean_customer_name)
+        df['CUSTOMER_NAME'] = df['raw_customer_name'].apply(
+            lambda name: format_customer_name(basic_clean_customer_name(name))
+        )
     
     # Extract additional info that was removed during cleaning
     df['additional_info'] = df.apply(
@@ -192,44 +216,13 @@ def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
         axis=1
     )
     
-    # Create descriptions with additional info
-    df['DESCRIPTION'] = df.apply(
-        lambda row: f"{row['Transaction Ref']} {row['additional_info']} {row['Transaction Description']}", 
-        axis=1
-    )
-    
-    # Clean up descriptions
-    df['DESCRIPTION'] = clean_descriptions(df['DESCRIPTION'])
+    # Create empty descriptions
+    df['DESCRIPTION'] = ''
     
     # Drop temporary columns
     df = df.drop(['original_desc1', 'original_desc', 'raw_customer_name', 'additional_info'], axis=1)
     
     return df
-
-
-def clean_descriptions(descriptions):
-    """
-    Clean and format description text.
-    
-    Args:
-        descriptions (pd.Series): Series of description texts
-        
-    Returns:
-        pd.Series: Cleaned descriptions
-    """
-    # Apply all cleaning operations
-    descriptions = (descriptions
-        .astype(str)
-        .str.replace(r'IBG PAYMENT INTO A/C.*', '', regex=True)  # Remove IBG payment text
-        .str.replace(r'MBB CT-.*', '', regex=True)        # Remove MBB CT text
-        .str.replace(r'-', '', regex=True)                # Remove "-" characters
-        .str.replace(r'\*', '', regex=True)               # Remove "*" characters
-        .str.replace(r'Fund transfer', '', regex=True)    # Remove "Fund transfer" text
-        .str.replace(r'\s+', ' ', regex=True)             # Replace multiple spaces with single space
-        .str.strip()                                      # Strip whitespace
-    )
-    
-    return descriptions
 
 
 def main(input_dir, output_dir):

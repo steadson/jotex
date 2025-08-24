@@ -6,8 +6,8 @@ import sys
 # Add the project root directory to sys.path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
-from nlp_parser import MY_mbb_txn_parser_nlp, MY_pbb_txn_parser_nlp
-from parser import SG_mbb_txn_parser, smarthome_mbb_txn_parser
+from parser import MY_pbb_txn_parser_nlp
+from parser import MY_mbb_txn_parser_nlp, SG_mbb_txn_parser, smarthome_mbb_txn_parser
 
 def my_mbb_parser():
     file_name = 'MBB_2025_raw_data.csv'
