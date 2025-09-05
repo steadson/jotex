@@ -34,20 +34,20 @@ wheels/
 RESULTS/
 test_requests
 logs/
-data/cache/
-data/downloads/
-data/input/
-data/output/
-data/output_backups/
-data/test_data/
-data/temp/
-data/training/
+# data/cache/
+# data/downloads/
+# data/input/
+# data/output/
+# data/output_backups/
+# data/test_data/
+# data/temp/
+# data/training/
 tests/mbb_txn_parser.py
 config/file_ids.md
 
 # Data files
-*.xlsx
-*.csv
+# *.xlsx
+# *.csv
 *.pkl
 *.ipynb
 
