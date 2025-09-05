@@ -3,6 +3,7 @@ msal
 requests
 python-dotenv
 openpyxl
+openai
 scikit-learn
 fuzzywuzzy
 python-Levenshtein

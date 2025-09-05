@@ -4,10 +4,13 @@ import os
 import pickle
 from pathlib import Path
 import warnings
+import logging
+from utils.logger import setup_logging
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=UserWarning)
-
+# Initialize logger
+logger = setup_logging('MY_pbb_txn_parser')
 # Global description markers (SO must be followed by numbers only)
 DESC_MARKERS = [
     r'PV-', r'SO\d+', r'INV', r'BINVOICE', r'Statement',
@@ -238,46 +241,89 @@ def extract_transaction_info(txn_desc, model_data=None):
     return formatted_name, ''
 
 def parse_pbb_txn(file_path, encoding='utf-8', model_data=None):
+    logger.info(f"Starting PBB transaction parsing for file: {file_path}")
+    
     if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
         raise FileNotFoundError(f"The file {file_path} does not exist.")
+    
+    # Try different encodings
     try:
+        logger.info(f"Attempting to read file with {encoding} encoding")
         df = pd.read_csv(file_path, encoding=encoding)
+        logger.info(f"Successfully read file with {encoding} encoding")
     except UnicodeDecodeError:
+        logger.warning(f"Failed to read with {encoding}, trying latin1 encoding")
         df = pd.read_csv(file_path, encoding='latin1')
+        logger.info("Successfully read file with latin1 encoding")
+    
+    logger.info(f"Loaded CSV with {len(df)} rows and {len(df.columns)} columns")
+    
     txn_desc_col = find_transaction_description_column(df)
     if not txn_desc_col:
+        logger.error("Could not find Transaction Description column")
         raise ValueError("Could not find Transaction Description column")
-    print(f"Found Transaction Description column: {txn_desc_col}")
+    
+    logger.info(f"Found Transaction Description column: {txn_desc_col}")
+    
     result_df = df.copy()
     result_df['CUSTOMER_NAME'] = ''
     result_df['DESCRIPTION'] = ''
+    
     customer_count = 0
     rule_based_count = 0
     model_based_count = 0
+    empty_desc_count = 0
+    
+    logger.info("Starting row-by-row processing")
+    
     for idx, row in df.iterrows():
         txn_desc = row[txn_desc_col]
+        
         if pd.notna(txn_desc):
+            logger.debug(f"Processing row {idx + 1}: {str(txn_desc)[:100]}...")
+            
             customer_name, _ = extract_transaction_info(txn_desc, model_data)
+            
             if customer_name:
                 result_df.at[idx, 'CUSTOMER_NAME'] = customer_name
                 customer_count += 1
+                
+                # Track extraction method
                 if model_data and customer_name == predict_customer_name(txn_desc, model_data):
                     model_based_count += 1
+                    logger.debug(f"Row {idx + 1}: Extracted customer name '{customer_name}' using ML model")
                 else:
                     rule_based_count += 1
+                    logger.debug(f"Row {idx + 1}: Extracted customer name '{customer_name}' using rules")
+            else:
+                logger.debug(f"Row {idx + 1}: No customer name extracted")
+            
             result_df.at[idx, 'DESCRIPTION'] = ''
         else:
+            empty_desc_count += 1
+            logger.debug(f"Row {idx + 1}: Empty transaction description")
             result_df.at[idx, 'DESCRIPTION'] = ''
+    
+    # Log final statistics
+    logger.info(f"Processing completed:")
+    logger.info(f"  Total rows processed: {len(df)}")
+    logger.info(f"  Customer names extracted: {customer_count}")
+    logger.info(f"  Rule-based extractions: {rule_based_count}")
+    logger.info(f"  Model-based extractions: {model_based_count}")
+    logger.info(f"  Empty descriptions: {empty_desc_count}")
+    logger.info(f"  Extraction success rate: {(customer_count/len(df)*100):.1f}%")
+    
     print(f"Processed {len(df)} transactions")
     print(f"Extracted {customer_count} customer names (Rule-based: {rule_based_count}, Model-based: {model_based_count})")
+    
     return result_df
-
-
 
 def main():
     """
     Main function to run the PBB transaction parser.
     """
+    logger.info("Starting PBB transaction parser main function")
     input_folder = 'data/downloads/new_rows'
     file_path = Path(input_folder) / 'PBB 2025.csv'
     output_folder = 'data/temp'
@@ -292,24 +338,34 @@ def main():
         model_data = None
         if os.path.exists(model_path):
             try:
+                logger.info(f"Loading customer name model from {model_path}")
                 with open(model_path, 'rb') as f:
                     model_data = pickle.load(f)
+                    logger.info(f"Successfully loaded model with {len(model_data['reference_dict'])} references")
                 print(f"Loaded customer name model with {len(model_data['reference_dict'])} references")
             except Exception as e:
+                logger.error(f"Failed to load model: {e}")
                 print(f"Warning: Could not load model: {e}")
+        else:
+            logger.warning(f"Model file not found: {model_path}")
         
         # Parse the transactions with ML enhancement
+        logger.info(f"Starting transaction parsing for {file_path}")
         print(f"Processing {file_path}")
         df = parse_pbb_txn(file_path, model_data=model_data)
+        logger.info(f"Parsing completed, saving to {output_file_path}")
         print(f"Processed {len(df)} transactions")
         
         # Save to CSV
         df.to_csv(output_file_path, index=False)
+        logger.info(f"Successfully saved processed data to {output_file_path}")
         print(f"Saved processed data to {output_file_path}")
             
     except Exception as e:
+        logger.error(f"Error in main function: {str(e)}")
         print(f"Error: {str(e)}")
         import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         traceback.print_exc()
 
 

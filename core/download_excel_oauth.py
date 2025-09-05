@@ -157,6 +157,30 @@ def identify_new_rows(new_df, file_name):
     
     return new_rows_df, new_rows_count
 
+def find_matching_sheet(available_sheets, target_month, target_year):
+    """
+    Find the best matching sheet name for the given month and year.
+    Handles multiple formats: "Aug'25", "Aug 25", "Aug", etc.
+    """
+    month_variations = [
+        f"{target_month}'{target_year}",  # "Aug'25"
+        f"{target_month} {target_year}",   # "Aug 25"
+        f"{target_month}'{target_year:02d}",  # "Aug'25" with zero-padded year
+        f"{target_month} {target_year:02d}",   # "Aug 25" with zero-padded year
+        target_month,  # "Aug"
+    ]
+    
+    for variation in month_variations:
+        if variation in available_sheets:
+            return variation
+    
+    # If no exact match, try partial matching
+    for sheet in available_sheets:
+        if target_month.lower() in sheet.lower():
+            return sheet
+    
+    return None
+
 def download_specific_file(access_token, drive_id, item_id, file_name, sheet_name=None):
     """
     Download a specific file using its drive ID and item ID.

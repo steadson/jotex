@@ -1,3 +1,4 @@
+
 """
 Bank Transaction Processing Workflow
 
@@ -39,9 +40,18 @@ from utils.cleanup_utils import delete_workflow_files
 from utils.update_customer_name import update_customer_name_for_file
 
 
-def run_script(script_func):
+def run_script(script_func, file_path=None, processed_file=None):
+
     try:
-        script_func.main() if hasattr(script_func, "main") else script_func()
+        # Handle special case for MY_mbb_txn_parser which needs file paths
+        if hasattr(script_func, '__name__') and 'MY_mbb_txn_parser' in script_func.__name__:
+
+            if file_path and processed_file:
+                script_func.main(file_path, processed_file)
+            else:
+                raise ValueError("MY_mbb_txn_parser requires input and output file paths")
+        else:
+            script_func.main() if hasattr(script_func, "main") else script_func()
         return True
     except Exception as e:
         logging.error(f"Script failed: {e}")
@@ -63,6 +73,7 @@ def execute_workflow():
 
     # Step 2: Process each file pair
     steps = [
+       
         {
             "file": "data/downloads/new_rows/MBB 2025.csv",
             "parser": MY_mbb_txn_parser,
@@ -75,12 +86,13 @@ def execute_workflow():
             "processed_file": "data/temp/PBB_2025_processed.csv",
             "payment": MY_pbb_create_pymt
         },
-        {
+         {
             "file": "data/downloads/new_rows/JOTEX PTE LTD MAYBANK SG 2025.csv",
             "parser": SG_mbb_txn_parser,
             "processed_file": "data/temp/SG_MBB_2025_processed.csv",
             "payment": SG_mbb_create_pymt
         },
+        
         {
             "file": "data/downloads/new_rows/Smarthome MBB 2025.csv",
             "parser": smarthome_mbb_txn_parser,
@@ -96,12 +108,21 @@ def execute_workflow():
         if Path(file_path).exists():
             logging.info(f"Processing {file_path}")
             print(f"Processing {file_path}")
+            # Special handling for Singapore MBB - skip filtering
+            if "JOTEX PTE LTD MAYBANK SG" in file_path:
+                # logging.info("Singapore MBB detected - skipping filter step")
+                # should_process = True
+                logging.info("no skipping filter for singapore")
+                should_process = filter_empty_rows(file_path)
+            else:
+                # Filter rows (remove rows where CUSTOMER_NAME is NOT empty)
+                should_process = filter_empty_rows(file_path)
             
             # Filter rows (remove rows where CUSTOMER_NAME is NOT empty)
-            if filter_empty_rows(file_path):
+            if should_process:
                 # Run parser
                 logging.info(f"Running parser for {file_path}")
-                if run_script(step["parser"]):
+                if run_script(step["parser"], file_path, step["processed_file"]):
                     # Update customer names using customer database
                     processed_file = step["processed_file"]
                     logging.info(f"Updating customer names for {processed_file}")

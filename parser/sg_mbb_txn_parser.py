@@ -3,7 +3,13 @@ import re
 import os
 from pathlib import Path
 import warnings
+import logging
+from utils.logger import setup_logging
+
 warnings.filterwarnings('ignore')
+
+# Initialize logger
+logger = setup_logging('sg_mbb_txn_parser')
 
 def find_transaction_description_column(df):
     """Find the column containing descriptions.
@@ -254,6 +260,7 @@ def extract_transaction_info(txn_desc):
     
     return customer_name, description
 
+
 def process_transactions(input_file, output_file):
     """
     Main function to process bank transactions from CSV and extract customer names and descriptions.
@@ -266,6 +273,7 @@ def process_transactions(input_file, output_file):
     bool: True if processing was successful, False otherwise
     """
     try:
+        logger.info(f"Starting SG MBB transaction processing for file: {input_file}")
         print(f"Processing file: {input_file}")
         
         # Try to detect encoding - sometimes bank CSV files use different encodings
@@ -274,22 +282,30 @@ def process_transactions(input_file, output_file):
         
         for encoding in encodings:
             try:
+                logger.info(f"Attempting to read file with {encoding} encoding")
                 df = pd.read_csv(input_file, encoding=encoding)
+                logger.info(f"Successfully read file with {encoding} encoding")
                 print(f"Successfully read file with {encoding} encoding")
                 break
             except UnicodeDecodeError:
+                logger.warning(f"Failed to read with {encoding} encoding")
                 continue
         
         if df is None:
+            logger.error("Could not read CSV file with any common encoding")
             print("Error: Could not read CSV file with any common encoding")
             return False
+        
+        logger.info(f"Loaded CSV with {len(df)} rows and {len(df.columns)} columns")
         
         # Find transaction description column
         txn_desc_col = find_transaction_description_column(df)
         if not txn_desc_col:
+            logger.error("Could not find Description column")
             print("Error: Could not find Description column")
             return False
         
+        logger.info(f"Found Description column: {txn_desc_col}")
         print(f"Found Description column: {txn_desc_col}")
         
         # Ensure CUSTOMER_NAME and DESCRIPTION columns exist
@@ -302,12 +318,34 @@ def process_transactions(input_file, output_file):
         # Process each row
         customer_count = 0
         total_rows = 0
+        inward_fast_count = 0
+        inward_paynow_count = 0
+        giro_credit_count = 0
+        ib_transfer_count = 0
+        unprocessed_count = 0
+        
+        logger.info("Starting row-by-row processing")
         
         for index, row in df.iterrows():
             txn_desc = row[txn_desc_col]
             
             if txn_desc and not pd.isna(txn_desc):
                 total_rows += 1
+                logger.debug(f"Processing row {index + 1}: {str(txn_desc)[:100]}...")
+                
+                # Track transaction types
+                if str(txn_desc).startswith("Inward FAST - "):
+                    inward_fast_count += 1
+                elif str(txn_desc).startswith("Inward PayNow from "):
+                    inward_paynow_count += 1
+                elif str(txn_desc).startswith("Giro Credit from "):
+                    giro_credit_count += 1
+                elif str(txn_desc).startswith("IB Transfer from "):
+                    ib_transfer_count += 1
+                else:
+                    unprocessed_count += 1
+                    logger.debug(f"Row {index + 1}: Unrecognized transaction type")
+                
                 # Extract customer name only (ignore description)
                 customer_name, _ = extract_transaction_info(txn_desc)
                 
@@ -315,12 +353,28 @@ def process_transactions(input_file, output_file):
                 if customer_name:
                     df.at[index, "CUSTOMER_NAME"] = customer_name
                     customer_count += 1
+                    logger.debug(f"Row {index + 1}: Extracted customer name '{customer_name}'")
+                else:
+                    logger.debug(f"Row {index + 1}: No customer name extracted")
                 
                 # DESCRIPTION column remains empty
         
+        # Log final statistics
+        logger.info(f"Processing completed:")
+        logger.info(f"  Total rows processed: {total_rows}")
+        logger.info(f"  Customer names extracted: {customer_count}")
+        logger.info(f"  Inward FAST transactions: {inward_fast_count}")
+        logger.info(f"  Inward PayNow transactions: {inward_paynow_count}")
+        logger.info(f"  Giro Credit transactions: {giro_credit_count}")
+        logger.info(f"  IB Transfer transactions: {ib_transfer_count}")
+        logger.info(f"  Unprocessed transactions: {unprocessed_count}")
+        logger.info(f"  Extraction success rate: {(customer_count/total_rows*100):.1f}%")
+        
         # Save the DataFrame to CSV
+        logger.info(f"Saving processed data to {output_file}")
         df.to_csv(output_file, index=False)
         
+        logger.info(f"Successfully saved processed data to {output_file}")
         print(f"Processed {total_rows} transactions")
         print(f"Extracted {customer_count} customer names")
         print(f"Saved to {output_file}")
@@ -328,28 +382,36 @@ def process_transactions(input_file, output_file):
         return True
     
     except Exception as e:
+        logger.error(f"Error processing transactions: {e}")
         print(f"Error processing transactions: {e}")
         import traceback
+        logger.error(f"Traceback: {traceback.format_exc()}")
         traceback.print_exc()
         return False
 
 def main():
     """Main function to be called by the workflow orchestrator."""
+    logger.info("Starting SG MBB transaction parser main function")
+    
     input_file = Path('data/downloads/new_rows') / 'JOTEX PTE LTD MAYBANK SG 2025.csv'
     output_file = Path('data/temp') / 'SG_MBB_2025_processed.csv'
     
     # Create output directory if it doesn't exist
     os.makedirs(Path('data/temp'), exist_ok=True)
     
+    logger.info(f"Input file: {input_file}")
+    logger.info(f"Output file: {output_file}")
+    
     success = process_transactions(input_file, output_file)
     
     if success:
+        logger.info("SG MBB transaction parsing completed successfully!")
         print("SG MBB transaction parsing completed successfully!")
         return True
     else:
+        logger.error("SG MBB transaction parsing failed")
         print("SG MBB transaction parsing failed. Check the error messages above.")
         return False
-
 # Example usage
 if __name__ == "__main__":
     main()

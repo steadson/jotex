@@ -25,6 +25,7 @@ def build_payment_payload(journal_id, journal_display_name, customer_info, posti
         "journalId": journal_id,
         "journalDisplayName": journal_display_name,
         "customerId": customer_info['customerId'],
+
         "customerNumber": customer_info['customerNumber'],
         "postingDate": posting_date,
         "amount": amount,

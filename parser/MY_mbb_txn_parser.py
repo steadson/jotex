@@ -4,7 +4,15 @@ import os
 import warnings
 import pickle
 from pathlib import Path
+import logging
+import sys
 from fuzzywuzzy import process
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from utils.logger import setup_logging
+
+# Setup logger for MBB parser
+logger = setup_logging('MY_mbb_parser')
 
 # Suppress warnings
 warnings.filterwarnings('ignore', category=UserWarning)
@@ -159,20 +167,27 @@ def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
     Returns:
         pd.DataFrame: DataFrame containing the parsed transaction data.
     """
+    logger.info(f"Starting MBB transaction parsing: {file_path}")
     # Check if the file exists
     if not os.path.exists(file_path):
+        logger.error(f"File not found: {file_path}")
         raise FileNotFoundError(f"The file {file_path} does not exist.")
 
     # Load the CSV file
     try:
         df = pd.read_csv(file_path, encoding=encoding)
+        logger.info(f"Successfully loaded CSV with {len(df)} rows using {encoding} encoding")
     except UnicodeDecodeError:
+        logger.warning(f"UTF-8 encoding failed, trying latin1")
         # Try with a different encoding if UTF-8 fails
         try:
             df = pd.read_csv(file_path, encoding='latin1')
+            logger.info(f"Successfully loaded CSV with {len(df)} rows using latin1 encoding")
         except Exception as e:
+            logger.error(f"Failed to read CSV with alternate encoding: {e}")
             raise ValueError(f"Error reading the CSV file with alternate encoding: {e}")
     except Exception as e:
+        logger.error(f"Error reading CSV file: {e}")
         raise ValueError(f"Error reading the CSV file: {e}")
 
     # Validate required columns exist
@@ -180,9 +195,13 @@ def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
     missing_columns = [col for col in required_columns if col not in df.columns]
     if missing_columns:
         raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
-    
+    logger.info(f"All required columns found: {required_columns}")
     # Skip rows with empty "Posting date"
+    original_count = len(df)
     df = df[pd.notna(df['Posting date'])].copy()
+    filtered_count = len(df)
+    logger.info(f"Filtered out {original_count - filtered_count} rows with empty posting dates")
+    logger.info(f"Processing {filtered_count} valid transactions")
     
     # Store original transaction descriptions for later use
     df['original_desc1'] = df['Transaction Description.1'].astype(str)
@@ -195,21 +214,49 @@ def parse_mbb_txn(file_path, encoding='utf-8', model_data=None):
         else row['Transaction Description'], 
         axis=1
     )
-    
+    # Track extraction statistics
+    extraction_stats = {
+        'total_processed': 0,
+        'successful_extractions': 0,
+        'empty_extractions': 0,
+        'model_used': model_data is not None
+    }
     # Apply cleaning to extract the CUSTOMER_NAME
     if model_data is not None:
-        # Use ML model if available
-        print("Using ML model for customer name cleaning")
-        df['CUSTOMER_NAME'] = df['raw_customer_name'].apply(
-            lambda name: predict_clean_name(name, model_data)
-        )
+        logger.info(f"Using ML model for customer name cleaning with {len(model_data['reference_dict'])} references")
+        for idx, name in enumerate(df['raw_customer_name']):
+            extraction_stats['total_processed'] += 1
+            cleaned_name = predict_clean_name(name, model_data)
+            df.at[idx, 'CUSTOMER_NAME'] = cleaned_name
+            
+            if cleaned_name and cleaned_name.strip():
+                extraction_stats['successful_extractions'] += 1
+                logger.debug(f"Row {idx+1}: '{name}' -> '{cleaned_name}' (ML)")
+            else:
+                extraction_stats['empty_extractions'] += 1
+                logger.debug(f"Row {idx+1}: '{name}' -> [EMPTY] (ML)")
     else:
-        # Use basic cleaning if no model
-        print("Using basic cleaning for customer names")
-        df['CUSTOMER_NAME'] = df['raw_customer_name'].apply(
-            lambda name: format_customer_name(basic_clean_customer_name(name))
-        )
+        logger.info("Using basic cleaning for customer names")
+        for idx, name in enumerate(df['raw_customer_name']):
+            extraction_stats['total_processed'] += 1
+            cleaned_name = format_customer_name(basic_clean_customer_name(name))
+            df.at[idx, 'CUSTOMER_NAME'] = cleaned_name
+            
+            if cleaned_name and cleaned_name.strip():
+                extraction_stats['successful_extractions'] += 1
+                logger.debug(f"Row {idx+1}: '{name}' -> '{cleaned_name}' (Basic)")
+            else:
+                extraction_stats['empty_extractions'] += 1
+                logger.debug(f"Row {idx+1}: '{name}' -> [EMPTY] (Basic)")
     
+    # Log extraction statistics
+    logger.info(f"Customer name extraction completed:")
+    logger.info(f"  Total processed: {extraction_stats['total_processed']}")
+    logger.info(f"  Successful extractions: {extraction_stats['successful_extractions']}")
+    logger.info(f"  Empty results: {extraction_stats['empty_extractions']}")
+    logger.info(f"  Success rate: {(extraction_stats['successful_extractions']/extraction_stats['total_processed']*100):.1f}%")
+    logger.info(f"  Method used: {'ML Model' if extraction_stats['model_used'] else 'Basic Cleaning'}")
+
     # Extract additional info that was removed during cleaning
     df['additional_info'] = df.apply(
         lambda row: extract_additional_info(row['raw_customer_name'], row['CUSTOMER_NAME']), 
@@ -229,6 +276,10 @@ def main(input_dir, output_dir):
     """
     Main function to run the MBB transaction parser.
     """
+
+    logger.info(f"=== MBB Transaction Parser Started ===")
+    logger.info(f"Input: {input_dir}")
+    logger.info(f"Output: {output_dir}")
     # Path to your trained model
     model_path = 'mbb_my_customer_name_model.pkl'
     
@@ -250,9 +301,13 @@ def main(input_dir, output_dir):
         
         # Save to CSV
         df.to_csv(output_dir, index=False)
+        logger.info(f"Successfully saved {len(df)} processed transactions to {output_dir}")
+        logger.info(f"=== MBB Transaction Parser Completed Successfully ===")
         print(f"Saved processed data to {output_dir}")
             
     except Exception as e:
+        logger.error(f"Parser failed with error: {str(e)}")
+        logger.error(f"=== MBB Transaction Parser Failed ===")
         print(f"Error: {str(e)}")
         import traceback
         traceback.print_exc()
